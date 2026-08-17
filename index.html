@@ -6,8 +6,6 @@
     <title>절친 비밀 엽사 갤러리</title>
     <!-- Supabase 라이브러리 CDN 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- 카카오 SDK 추가 -->
-    <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
     <style>
         :root {
             --bg-deep: #f8fafc;       
@@ -22,6 +20,7 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* 페이지 전체 텍스트 및 드래그 철저 차단 */
         body {
             font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: var(--bg-deep);
@@ -30,6 +29,28 @@
             display: flex;
             justify-content: center;
             min-height: 100vh;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* 이미지 저장 및 드래그, 모바일 꾹 누르기 메뉴 차단 */
+        img {
+            -webkit-user-drag: none;
+            -khtml-user-drag: none;
+            -moz-user-drag: none;
+            -o-user-drag: none;
+            user-drag: none;
+            -webkit-touch-callout: none; /* 모바일에서 이미지를 꾹 눌러 저장하는 메뉴 방지 */
+            pointer-events: none;
+        }
+
+        /* 버튼이나 입력창 등은 정상 작동하도록 허용 */
+        button, input, select, textarea {
+            pointer-events: auto;
+            -webkit-user-select: auto;
+            user-select: auto;
         }
 
         .main-wrapper {
@@ -73,6 +94,30 @@
             border-radius: var(--radius-main);
             border: 1px solid var(--border-color);
             box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        /* 공지사항 카드 스타일 */
+        .notice-card {
+            background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+            border: 1px solid #86efac;
+            padding: 20px 24px;
+            border-radius: var(--radius-main);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        }
+        .notice-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #166534;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .notice-content {
+            font-size: 0.95rem;
+            color: #14532d;
+            font-weight: 600;
+            line-height: 1.4;
         }
 
         .card-title {
@@ -126,20 +171,6 @@
             display: flex;
             gap: 10px;
         }
-
-        .btn-kakao {
-            flex: 1;
-            padding: 12px;
-            background-color: #fee500;
-            color: #191919;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .btn-kakao:hover { opacity: 0.9; }
 
         .btn-link-copy {
             flex: 1;
@@ -332,6 +363,7 @@
         .action-buttons {
             display: flex;
             gap: 10px;
+            margin-bottom: 16px;
         }
 
         .action-btn {
@@ -367,6 +399,64 @@
         }
         .btn-back:hover { background-color: #cbd5e1; }
 
+        /* 댓글 영역 스타일 */
+        .comments-section {
+            border-top: 1px solid var(--border-color);
+            padding-top: 14px;
+            margin-top: 10px;
+        }
+
+        .comments-list {
+            max-height: 120px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .comment-item {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            background-color: #f8fafc;
+            padding: 6px 10px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .comment-author {
+            font-weight: 700;
+            color: var(--text-main);
+            margin-right: 6px;
+        }
+
+        .comment-form {
+            display: flex;
+            gap: 6px;
+        }
+
+        .comment-input {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+
+        .comment-submit-btn {
+            padding: 8px 14px;
+            background-color: var(--text-main);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .comment-submit-btn:hover { background-color: #334155; }
+
         @media (max-width: 600px) {
             body { padding: 15px 10px; }
             header { flex-direction: column; gap: 12px; align-items: flex-start; }
@@ -375,7 +465,7 @@
         }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
 
     <div class="main-wrapper">
         <header>
@@ -396,6 +486,7 @@
 
         let currentUser = "";
         let photos = [];
+        let commentsMap = {}; 
         let members = [];
         let isSignUpMode = false;
         let selectedProfile = null;
@@ -521,6 +612,9 @@
                     return;
                 }
 
+                localStorage.setItem('yubsa_new_user', nickname);
+                localStorage.setItem('yubsa_signup_time', Date.now().toString());
+
                 alert("회원가입 완료! 로그인되었습니다.");
                 currentUser = nickname;
             } else {
@@ -552,11 +646,34 @@
         function renderMainContent() {
             const contentArea = document.getElementById("contentArea");
             
+            let noticeHtml = "";
+            const newUser = localStorage.getItem('yubsa_new_user');
+            const signupTime = parseInt(localStorage.getItem('yubsa_signup_time') || '0', 10);
+            const now = Date.now();
+            const FIVE_MINUTES = 5 * 60 * 1000;
+
+            if (newUser && (now - signupTime < FIVE_MINUTES)) {
+                noticeHtml = `
+                    <div class="notice-card">
+                        <div class="notice-title">📢 긴급 공지</div>
+                        <div class="notice-content">🎉 신규가입자 <b>${newUser}</b> 님 환영합니다~!</div>
+                    </div>
+                `;
+            } else {
+                noticeHtml = `
+                    <div class="notice-card">
+                        <div class="notice-title">📢 공지사항</div>
+                        <div class="notice-content">본인 엽사가 너무 수치스러워 신고해버릴거 같다~하는 사람은 <b>'박병목에게로'</b></div>
+                    </div>
+                `;
+            }
+
             if (selectedProfile) {
                 const userPhotos = photos.filter(p => p.target && p.target.toLowerCase() === selectedProfile.toLowerCase());
                 const totalLikes = userPhotos.reduce((sum, p) => sum + (p.likes || 0), 0);
 
                 contentArea.innerHTML = `
+                    ${noticeHtml}
                     <div class="card">
                         <div class="card-title">
                             <span>프로필 피드</span>
@@ -592,13 +709,12 @@
                 });
 
                 contentArea.innerHTML = `
+                    ${noticeHtml}
+
                     <div class="card">
                         <h2 class="card-title">친구 초대하기</h2>
                         <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">친구들과 갤러리를 공유하고 엽사를 모아보세요!</p>
-                        <div class="share-buttons">
-                            <button class="btn-kakao" onclick="shareKakao()">💬 카카오톡 공유</button>
-                            <button class="btn-link-copy" onclick="copyInviteLink()">🔗 링크 복사</button>
-                        </div>
+                        <button class="btn-link-copy" onclick="copyInviteLink()" style="width: 100%; padding: 14px; font-weight: 700;">🔗 링크 복사하기</button>
                     </div>
 
                     <div class="card">
@@ -641,28 +757,13 @@
             }
         }
 
-        // 링크 복사 함수
         function copyInviteLink() {
             const inviteUrl = window.location.href;
             navigator.clipboard.writeText(inviteUrl).then(() => {
-                alert("갤러리 주소가 복사되었습니다! 친구에게 붙여넣어 공유하세요. (초대 코드: 2026)");
+                alert("초대 링크가 복사되었습니다! 친구에게 공유해 보세요. (초대 코드: 2026)");
             }).catch(err => {
-                alert("복사 실패: " + err);
+                alert("링크 복사에 실패했습니다: " + err);
             });
-        }
-
-        // 카카오톡 공유 함수 (기본 웹 공유 API 활용)
-        function shareKakao() {
-            const shareUrl = window.location.href;
-            if (navigator.share) {
-                navigator.share({
-                    title: 'YUBSA - 절친 비밀 엽사 갤러리',
-                    text: '우리들의 웃긴 엽사 모음집에 초대합니다! 구경하러 오세요.',
-                    url: shareUrl,
-                }).catch((error) => console.log('공유 취소 또는 실패', error));
-            } else {
-                copyInviteLink();
-            }
         }
 
         function searchProfile() {
@@ -696,8 +797,65 @@
                 return;
             }
             photos = data || [];
+            await fetchComments();
             await fetchMembers();
             renderMainContent();
+        }
+
+        async function fetchComments() {
+            const { data, error } = await supabaseClient
+                .from('comments')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (!error && data) {
+                commentsMap = {};
+                data.forEach(c => {
+                    if (!commentsMap[c.photo_id]) {
+                        commentsMap[c.photo_id] = [];
+                    }
+                    commentsMap[c.photo_id].push(c);
+                });
+            }
+        }
+
+        async function addComment(photoId) {
+            const input = document.getElementById(`commentInput_${photoId}`);
+            const content = input.value.trim();
+
+            if (!content) {
+                alert("댓글 내용을 입력해주세요!");
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('comments')
+                .insert([{ photo_id: photoId, author: currentUser, content: content }]);
+
+            if (error) {
+                alert("댓글 작성 실패: " + error.message);
+                return;
+            }
+
+            input.value = "";
+            await fetchComments();
+            renderGalleryList();
+        }
+
+        async function deleteComment(commentId) {
+            if (confirm("댓글을 삭제하시겠습니까?")) {
+                const { error } = await supabaseClient
+                    .from('comments')
+                    .delete()
+                    .eq('id', commentId);
+
+                if (error) {
+                    alert("삭제 실패: " + error.message);
+                    return;
+                }
+                await fetchComments();
+                renderGalleryList();
+            }
         }
 
         async function uploadPhoto() {
@@ -770,6 +928,18 @@
             photos.forEach(photo => {
                 let canDelete = (photo.uploader === currentUser);
                 let titleText = photo.title ? photo.title : "제목 없음";
+                
+                let photoComments = commentsMap[photo.id] || [];
+                let commentsHtml = "";
+                photoComments.forEach(c => {
+                    let canDeleteComment = (c.author === currentUser);
+                    commentsHtml += `
+                        <div class="comment-item">
+                            <div><span class="comment-author">${c.author}</span>${c.content}</div>
+                            ${canDeleteComment ? `<span style="cursor:pointer; color:var(--danger); font-size:0.75rem;" onclick="deleteComment(${c.id})">삭제</span>` : ''}
+                        </div>
+                    `;
+                });
 
                 html += `
                     <div class="gallery-item">
@@ -794,6 +964,16 @@
                                     🗑️ 삭제
                                 </button>` : ''}
                             </div>
+
+                            <div class="comments-section">
+                                <div class="comments-list">
+                                    ${photoComments.length > 0 ? commentsHtml : '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 4px 0;">작성된 댓글이 없습니다.</p>'}
+                                </div>
+                                <div class="comment-form">
+                                    <input type="text" id="commentInput_${photo.id}" class="comment-input" placeholder="댓글을 입력하세요...">
+                                    <button class="comment-submit-btn" onclick="addComment(${photo.id})">등록</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -815,7 +995,7 @@
             userPhotos.forEach(photo => {
                 let titleText = photo.title ? photo.title : "제목 없음";
                 html += `
-                    <div class="grid-item" data-likes="${photo.likes || 0}" onclick="alert('제목: ${titleText} / 주인공: ${photo.target} / 좋아요: ${photo.likes || 0}')">
+                    <div class="grid-item" data-likes="${photo.likes || 0}">
                         <img src="${photo.url}" alt="피드 사진">
                     </div>
                 `;
@@ -872,6 +1052,8 @@
                 await supabaseClient.storage
                     .from('yubsa-bucket')
                     .remove([fileName]);
+
+                await supabaseClient.from('comments').delete().eq('photo_id', id);
 
                 const { error } = await supabaseClient
                     .from('photos')
