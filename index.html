@@ -53,6 +53,7 @@
             font-size: 1.4rem;
             font-weight: 700;
             color: var(--text-main);
+            cursor: pointer;
         }
 
         .user-welcome {
@@ -77,6 +78,9 @@
             color: var(--text-main);
             margin-bottom: 20px;
             font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .form-group { margin-bottom: 15px; }
@@ -127,11 +131,101 @@
         }
         .auth-toggle-text span:hover { text-decoration: underline; }
 
-        .gallery-container {
+        /* 인스타 스타일 프로필 헤더 */
+        .instagram-profile {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .profile-info {
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 8px;
         }
+
+        .profile-username {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .profile-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.95rem;
+        }
+
+        .profile-stats span b {
+            color: var(--text-main);
+        }
+
+        .profile-stats span {
+            color: var(--text-muted);
+        }
+
+        /* 인스타 그리드 피드 스타일 (3열) */
+        .instagram-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .grid-item {
+            position: relative;
+            aspect-ratio: 1 / 1;
+            background-color: #f1f5f9;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .grid-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .grid-item:hover::after {
+            content: '❤️ ' attr(data-likes);
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        /* 기존 캐러셀 전체 갤러리 스타일 */
+        .gallery-container {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 10px;
+        }
+
+        .gallery-container::-webkit-scrollbar { height: 8px; }
+        .gallery-container::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
 
         .empty-msg {
             text-align: center;
@@ -139,9 +233,13 @@
             padding: 40px 0;
             font-size: 0.95rem;
             font-weight: 600;
+            width: 100%;
         }
 
         .gallery-item {
+            flex: 0 0 100%;
+            max-width: 100%;
+            scroll-snap-align: start;
             background-color: #fff;
             border-radius: 12px;
             overflow: hidden;
@@ -151,10 +249,10 @@
 
         .gallery-item img {
             width: 100%;
-            height: 350px;
-            object-fit: cover;
+            max-height: 400px;
+            object-fit: contain;
             display: block;
-            background-color: #f1f5f9;
+            background-color: #ffffff;
         }
 
         .photo-details { padding: 20px; }
@@ -174,9 +272,12 @@
             font-size: 0.85rem;
             font-weight: 700;
             border: 1px solid var(--border-color);
+            cursor: pointer;
         }
+        .info-tag:hover { background-color: #e2e8f0; }
 
-        .info-text { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; }
+        .info-text { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; cursor: pointer; }
+        .info-text:hover { text-decoration: underline; }
 
         .likes-count {
             font-size: 1.1rem;
@@ -207,24 +308,29 @@
             transition: background-color 0.2s;
         }
 
-        .btn-like {
-            background-color: #ffe4e6;
-            color: var(--danger);
-        }
+        .btn-like { background-color: #ffe4e6; color: var(--danger); }
         .btn-like:hover { background-color: #fecdd3; }
 
-        .btn-delete {
-            background-color: #f1f5f9;
-            color: var(--text-main);
-            border: 1px solid var(--border-color);
-        }
+        .btn-delete { background-color: #f1f5f9; color: var(--text-main); border: 1px solid var(--border-color); }
         .btn-delete:hover { background-color: #e2e8f0; }
+
+        .btn-back {
+            background-color: #e2e8f0;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--text-main);
+        }
+        .btn-back:hover { background-color: #cbd5e1; }
 
         @media (max-width: 600px) {
             body { padding: 15px 10px; }
             header { flex-direction: column; gap: 12px; align-items: flex-start; }
             .card { padding: 20px; }
-            .gallery-item img { height: 260px; }
+            .instagram-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -232,7 +338,7 @@
 
     <div class="main-wrapper">
         <header>
-            <h1>YUBSA</h1>
+            <h1 onclick="resetView()">YUBSA</h1>
             <div id="authArea"></div>
         </header>
 
@@ -241,11 +347,8 @@
     </div>
 
     <script>
-        // 🔑 Supabase 정보 설정
         const SUPABASE_URL = 'https://jtjxhyxyxwdwyayrdxpm.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0anhoeXh5eHdkd3lheXJkeHBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5MzUwMTUsImV4cCI6MjEwMjUxMTAxNX0._-BAMI-cT7awy3sPsH5LC7i_RYdvxNGlyBPcItqG6SM';
-        
-        // 🔒 설정할 초대 코드 (이 코드를 아는 친구들만 가입 가능)
         const INVITE_CODE = '2026'; 
 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -253,8 +356,8 @@
         let currentUser = "";
         let photos = [];
         let isSignUpMode = false;
+        let selectedProfile = null; // 특정 인물 프로필 보기 모드 (이름 저장)
 
-        // 자동 로그인 세션 체크 기능 포함 초기화
         async function initApp() {
             const { data: { session } } = await supabaseClient.auth.getSession();
             
@@ -270,7 +373,7 @@
             if (!currentUser) {
                 renderAuthScreen();
             } else {
-                renderMainGallery();
+                renderMainContent();
                 fetchPhotos();
             }
         }
@@ -388,37 +491,91 @@
             initApp();
         }
 
-        function renderMainGallery() {
+        function renderMainContent() {
             const contentArea = document.getElementById("contentArea");
-            contentArea.innerHTML = `
-                <div class="card">
-                    <h2 class="card-title">새로운 엽사 올리기</h2>
-                    <div class="form-group">
-                        <label>사진 속 주인공 이름</label>
-                        <input type="text" id="targetName" placeholder="예: 홍길동">
-                    </div>
-                    <div class="form-group">
-                        <label>이미지 파일</label>
-                        <input type="file" id="imageFile" accept="image/*">
-                    </div>
-                    <button class="btn-primary" onclick="uploadPhoto()">업로드하기</button>
-                </div>
+            
+            if (selectedProfile) {
+                // 인스타 프로필 피드 모드
+                const userPhotos = photos.filter(p => p.target.toLowerCase() === selectedProfile.toLowerCase() || p.uploader.toLowerCase() === selectedProfile.toLowerCase());
+                const totalLikes = userPhotos.reduce((sum, p) => sum + p.likes, 0);
 
-                <div class="card">
-                    <h2 class="card-title">인물 검색</h2>
-                    <div class="form-group">
-                        <label>찾을 사람 이름 입력 (비워두면 전체)</label>
-                        <input type="text" id="searchInput" placeholder="이름 검색" oninput="renderGalleryList()">
-                    </div>
-                </div>
+                contentArea.innerHTML = `
+                    <div class="card">
+                        <div class="card-title">
+                            <span>프로필 피드</span>
+                            <button class="btn-back" onclick="resetView()">전체 갤러리로</button>
+                        </div>
+                        
+                        <div class="instagram-profile">
+                            <div class="profile-avatar">${selectedProfile.charAt(0)}</div>
+                            <div class="profile-info">
+                                <div class="profile-username">🎯 ${selectedProfile}</div>
+                                <div class="profile-stats">
+                                    <span>게시물 <b>${userPhotos.length}</b></span>
+                                    <span>받은 좋아요 <b>${totalLikes}</b></span>
+                                </div>
+                            </div>
+                        </div>
 
-                <div class="card">
-                    <h2 class="card-title">갤러리 (좋아요 순)</h2>
-                    <div class="gallery-container" id="galleryContainer">
-                        <p class="empty-msg">불러오는 중...</p>
+                        <div class="instagram-grid" id="profileGrid">
+                            <p class="empty-msg">불러오는 중...</p>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+                renderProfileGrid(userPhotos);
+            } else {
+                // 일반 홈 모드 (업로드 + 검색 + 전체 갤러리)
+                contentArea.innerHTML = `
+                    <div class="card">
+                        <h2 class="card-title">새로운 엽사 올리기</h2>
+                        <div class="form-group">
+                            <label>사진 속 주인공 이름</label>
+                            <input type="text" id="targetName" placeholder="예: 홍길동">
+                        </div>
+                        <div class="form-group">
+                            <label>이미지 파일</label>
+                            <input type="file" id="imageFile" accept="image/*">
+                        </div>
+                        <button class="btn-primary" onclick="uploadPhoto()">업로드하기</button>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">인물 검색</h2>
+                        <div class="form-group" style="display: flex; gap: 10px;">
+                            <input type="text" id="searchInput" placeholder="찾을 사람 이름 입력">
+                            <button class="btn-primary" style="margin-top: 0; width: 120px;" onclick="searchProfile()">검색하기</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="card-title">전체 갤러리 (좋아요 순)</h2>
+                        <div class="gallery-container" id="galleryContainer">
+                            <p class="empty-msg">불러오는 중...</p>
+                        </div>
+                    </div>
+                `;
+                renderGalleryList();
+            }
+        }
+
+        function searchProfile() {
+            const input = document.getElementById("searchInput");
+            if (!input || !input.value.trim()) {
+                alert("검색할 이름을 입력해주세요!");
+                return;
+            }
+            selectedProfile = input.value.trim();
+            renderMainContent();
+        }
+
+        function openProfile(name) {
+            selectedProfile = name;
+            renderMainContent();
+        }
+
+        function resetView() {
+            selectedProfile = null;
+            renderMainContent();
         }
 
         async function fetchPhotos() {
@@ -433,7 +590,7 @@
                 return;
             }
             photos = data || [];
-            renderGalleryList();
+            renderMainContent(); // 데이터가 로드되면 화면 갱신
         }
 
         async function uploadPhoto() {
@@ -489,20 +646,16 @@
         }
 
         function renderGalleryList() {
-            const searchInput = document.getElementById("searchInput");
-            const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : "";
             const container = document.getElementById("galleryContainer");
             if (!container) return;
 
-            let filteredPhotos = photos.filter(p => p.target.toLowerCase().includes(searchQuery));
-
-            if (filteredPhotos.length === 0) {
-                container.innerHTML = `<p class="empty-msg">조건에 맞는 사진이 없습니다.</p>`;
+            if (photos.length === 0) {
+                container.innerHTML = `<p class="empty-msg">등록된 사진이 없습니다.</p>`;
                 return;
             }
 
             let html = "";
-            filteredPhotos.forEach(photo => {
+            photos.forEach(photo => {
                 let canDelete = (photo.uploader === currentUser);
 
                 html += `
@@ -511,8 +664,8 @@
                         <div class="photo-details">
                             <div class="info-row">
                                 <div style="display: flex; gap: 8px; align-items: center;">
-                                    <span class="info-tag">🎯 ${photo.target}</span>
-                                    <span class="info-text">올린이: ${photo.uploader}</span>
+                                    <span class="info-tag" onclick="openProfile('${photo.target}')">🎯 ${photo.target}</span>
+                                    <span class="info-text" onclick="openProfile('${photo.uploader}')">올린이: ${photo.uploader}</span>
                                 </div>
                                 <div class="likes-count">
                                     ❤️ ${photo.likes}
@@ -534,6 +687,26 @@
             });
 
             container.innerHTML = html;
+        }
+
+        function renderProfileGrid(userPhotos) {
+            const gridContainer = document.getElementById("profileGrid");
+            if (!gridContainer) return;
+
+            if (userPhotos.length === 0) {
+                gridContainer.innerHTML = `<p class="empty-msg" style="grid-column: span 3;">이 인물이 올리거나 박힌 사진이 없습니다.</p>`;
+                return;
+            }
+
+            let html = "";
+            userPhotos.forEach(photo => {
+                html += `
+                    <div class="grid-item" data-likes="${photo.likes}" onclick="alert('주인공: ${photo.target} / 올린이: ${photo.uploader} / 좋아요: ${photo.likes}')">
+                        <img src="${photo.url}" alt="피드 사진">
+                    </div>
+                `;
+            });
+            gridContainer.innerHTML = html;
         }
 
         async function addLike(id, currentLikes) {
