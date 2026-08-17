@@ -6,6 +6,8 @@
     <title>절친 비밀 엽사 갤러리</title>
     <!-- Supabase 라이브러리 CDN 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 카카오 SDK 추가 -->
+    <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
     <style>
         :root {
             --bg-deep: #f8fafc;       
@@ -88,7 +90,8 @@
 
         input[type="text"],
         input[type="password"],
-        input[type="file"] {
+        input[type="file"],
+        select {
             width: 100%;
             padding: 12px 16px;
             background-color: #ffffff;
@@ -100,7 +103,8 @@
         }
 
         input[type="text"]:focus,
-        input[type="password"]:focus { outline: none; border-color: var(--accent); }
+        input[type="password"]:focus,
+        select:focus { outline: none; border-color: var(--accent); }
         input[type="file"] { padding: 8px; font-size: 0.9rem; }
 
         .btn-primary {
@@ -117,6 +121,39 @@
             transition: background-color 0.2s;
         }
         .btn-primary:hover { background-color: #334155; }
+
+        .share-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-kakao {
+            flex: 1;
+            padding: 12px;
+            background-color: #fee500;
+            color: #191919;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-kakao:hover { opacity: 0.9; }
+
+        .btn-link-copy {
+            flex: 1;
+            padding: 12px;
+            background-color: #e2e8f0;
+            color: var(--text-main);
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-link-copy:hover { background-color: #cbd5e1; }
 
         .auth-toggle-text {
             text-align: center;
@@ -215,7 +252,7 @@
             font-size: 1rem;
         }
 
-        /* 기존 캐러셀 전체 갤러리 스타일 */
+        /* 가로 스크롤 캐러셀 스타일 */
         .gallery-container {
             display: flex;
             gap: 20px;
@@ -257,6 +294,13 @@
 
         .photo-details { padding: 20px; }
 
+        .photo-title-text {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 12px;
+        }
+
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -275,9 +319,6 @@
             cursor: pointer;
         }
         .info-tag:hover { background-color: #e2e8f0; }
-
-        .info-text { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; cursor: pointer; }
-        .info-text:hover { text-decoration: underline; }
 
         .likes-count {
             font-size: 1.1rem;
@@ -355,8 +396,9 @@
 
         let currentUser = "";
         let photos = [];
+        let members = [];
         let isSignUpMode = false;
-        let selectedProfile = null; // 특정 인물 프로필 보기 모드 (이름 저장)
+        let selectedProfile = null;
 
         async function initApp() {
             const { data: { session } } = await supabaseClient.auth.getSession();
@@ -369,6 +411,7 @@
                 currentUser = localStorage.getItem('yubsa_user') || "";
             }
 
+            await fetchMembers();
             renderAuthArea();
             if (!currentUser) {
                 renderAuthScreen();
@@ -376,6 +419,21 @@
                 renderMainContent();
                 fetchPhotos();
             }
+        }
+
+        async function fetchMembers() {
+            let set = new Set();
+            if (currentUser) set.add(currentUser);
+            ['박병목', '김병수', '김태용'].forEach(m => set.add(m));
+
+            const { data, error } = await supabaseClient.from('photos').select('target, uploader');
+            if (data) {
+                data.forEach(p => {
+                    if (p.target) set.add(p.target);
+                    if (p.uploader) set.add(p.uploader);
+                });
+            }
+            members = Array.from(set);
         }
 
         function renderAuthArea() {
@@ -495,9 +553,8 @@
             const contentArea = document.getElementById("contentArea");
             
             if (selectedProfile) {
-                // 인스타 프로필 피드 모드
-                const userPhotos = photos.filter(p => p.target.toLowerCase() === selectedProfile.toLowerCase() || p.uploader.toLowerCase() === selectedProfile.toLowerCase());
-                const totalLikes = userPhotos.reduce((sum, p) => sum + p.likes, 0);
+                const userPhotos = photos.filter(p => p.target && p.target.toLowerCase() === selectedProfile.toLowerCase());
+                const totalLikes = userPhotos.reduce((sum, p) => sum + (p.likes || 0), 0);
 
                 contentArea.innerHTML = `
                     <div class="card">
@@ -524,13 +581,37 @@
                 `;
                 renderProfileGrid(userPhotos);
             } else {
-                // 일반 홈 모드 (업로드 + 검색 + 전체 갤러리)
+                let memberOptions = `<option value="">-- 주인공 선택 --</option>`;
+                members.forEach(m => {
+                    memberOptions += `<option value="${m}">${m}</option>`;
+                });
+
+                let searchOptions = `<option value="">-- 인물 선택 --</option>`;
+                members.forEach(m => {
+                    searchOptions += `<option value="${m}">${m}</option>`;
+                });
+
                 contentArea.innerHTML = `
+                    <div class="card">
+                        <h2 class="card-title">친구 초대하기</h2>
+                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">친구들과 갤러리를 공유하고 엽사를 모아보세요!</p>
+                        <div class="share-buttons">
+                            <button class="btn-kakao" onclick="shareKakao()">💬 카카오톡 공유</button>
+                            <button class="btn-link-copy" onclick="copyInviteLink()">🔗 링크 복사</button>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <h2 class="card-title">새로운 엽사 올리기</h2>
                         <div class="form-group">
-                            <label>사진 속 주인공 이름</label>
-                            <input type="text" id="targetName" placeholder="예: 홍길동">
+                            <label>사진 이름 (제목)</label>
+                            <input type="text" id="photoTitle" placeholder="예: 레전드 엽사">
+                        </div>
+                        <div class="form-group">
+                            <label>사진 속 주인공 선택</label>
+                            <select id="targetSelect">
+                                ${memberOptions}
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>이미지 파일</label>
@@ -542,13 +623,15 @@
                     <div class="card">
                         <h2 class="card-title">인물 검색</h2>
                         <div class="form-group" style="display: flex; gap: 10px;">
-                            <input type="text" id="searchInput" placeholder="찾을 사람 이름 입력">
+                            <select id="searchSelect">
+                                ${searchOptions}
+                            </select>
                             <button class="btn-primary" style="margin-top: 0; width: 120px;" onclick="searchProfile()">검색하기</button>
                         </div>
                     </div>
 
                     <div class="card">
-                        <h2 class="card-title">전체 갤러리 (좋아요 순)</h2>
+                        <h2 class="card-title">전체 갤러리 (올린 순서)</h2>
                         <div class="gallery-container" id="galleryContainer">
                             <p class="empty-msg">불러오는 중...</p>
                         </div>
@@ -558,13 +641,37 @@
             }
         }
 
+        // 링크 복사 함수
+        function copyInviteLink() {
+            const inviteUrl = window.location.href;
+            navigator.clipboard.writeText(inviteUrl).then(() => {
+                alert("갤러리 주소가 복사되었습니다! 친구에게 붙여넣어 공유하세요. (초대 코드: 2026)");
+            }).catch(err => {
+                alert("복사 실패: " + err);
+            });
+        }
+
+        // 카카오톡 공유 함수 (기본 웹 공유 API 활용)
+        function shareKakao() {
+            const shareUrl = window.location.href;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'YUBSA - 절친 비밀 엽사 갤러리',
+                    text: '우리들의 웃긴 엽사 모음집에 초대합니다! 구경하러 오세요.',
+                    url: shareUrl,
+                }).catch((error) => console.log('공유 취소 또는 실패', error));
+            } else {
+                copyInviteLink();
+            }
+        }
+
         function searchProfile() {
-            const input = document.getElementById("searchInput");
-            if (!input || !input.value.trim()) {
-                alert("검색할 이름을 입력해주세요!");
+            const select = document.getElementById("searchSelect");
+            if (!select || !select.value) {
+                alert("검색할 인물을 선택해주세요!");
                 return;
             }
-            selectedProfile = input.value.trim();
+            selectedProfile = select.value;
             renderMainContent();
         }
 
@@ -582,7 +689,6 @@
             const { data, error } = await supabaseClient
                 .from('photos')
                 .select('*')
-                .order('likes', { ascending: false })
                 .order('created_at', { ascending: false });
 
             if (error) {
@@ -590,15 +696,21 @@
                 return;
             }
             photos = data || [];
-            renderMainContent(); // 데이터가 로드되면 화면 갱신
+            await fetchMembers();
+            renderMainContent();
         }
 
         async function uploadPhoto() {
-            const targetName = document.getElementById("targetName").value.trim();
+            const photoTitle = document.getElementById("photoTitle").value.trim();
+            const targetName = document.getElementById("targetSelect").value;
             const fileInput = document.getElementById("imageFile");
 
+            if (!photoTitle) {
+                alert("사진 이름을 입력해주세요.");
+                return;
+            }
             if (!targetName) {
-                alert("사진 속 주인공 이름을 입력해주세요.");
+                alert("사진 속 주인공을 선택해주세요.");
                 return;
             }
             if (fileInput.files.length === 0) {
@@ -631,7 +743,7 @@
             const { error: dbError } = await supabaseClient
                 .from('photos')
                 .insert([
-                    { url: imageUrl, target: targetName, uploader: currentUser, likes: 0 }
+                    { title: photoTitle, url: imageUrl, target: targetName, uploader: currentUser, likes: 0, liked_users: [] }
                 ]);
 
             if (dbError) {
@@ -639,7 +751,7 @@
                 return;
             }
 
-            document.getElementById("targetName").value = "";
+            document.getElementById("photoTitle").value = "";
             fileInput.value = "";
             alert("업로드 완료!");
             fetchPhotos();
@@ -657,23 +769,24 @@
             let html = "";
             photos.forEach(photo => {
                 let canDelete = (photo.uploader === currentUser);
+                let titleText = photo.title ? photo.title : "제목 없음";
 
                 html += `
                     <div class="gallery-item">
                         <img src="${photo.url}" alt="엽사">
                         <div class="photo-details">
+                            <div class="photo-title-text">📌 ${titleText}</div>
                             <div class="info-row">
                                 <div style="display: flex; gap: 8px; align-items: center;">
                                     <span class="info-tag" onclick="openProfile('${photo.target}')">🎯 ${photo.target}</span>
-                                    <span class="info-text" onclick="openProfile('${photo.uploader}')">올린이: ${photo.uploader}</span>
                                 </div>
                                 <div class="likes-count">
-                                    ❤️ ${photo.likes}
+                                    ❤️ ${photo.likes || 0}
                                 </div>
                             </div>
                             
                             <div class="action-buttons">
-                                <button class="action-btn btn-like" onclick="addLike(${photo.id}, ${photo.likes})">
+                                <button class="action-btn btn-like" onclick="addLike(${photo.id})">
                                     👍 좋아요
                                 </button>
                                 ${canDelete ? `
@@ -694,14 +807,15 @@
             if (!gridContainer) return;
 
             if (userPhotos.length === 0) {
-                gridContainer.innerHTML = `<p class="empty-msg" style="grid-column: span 3;">이 인물이 올리거나 박힌 사진이 없습니다.</p>`;
+                gridContainer.innerHTML = `<p class="empty-msg" style="grid-column: span 3;">이 인물이 주인공인 사진이 없습니다.</p>`;
                 return;
             }
 
             let html = "";
             userPhotos.forEach(photo => {
+                let titleText = photo.title ? photo.title : "제목 없음";
                 html += `
-                    <div class="grid-item" data-likes="${photo.likes}" onclick="alert('주인공: ${photo.target} / 올린이: ${photo.uploader} / 좋아요: ${photo.likes}')">
+                    <div class="grid-item" data-likes="${photo.likes || 0}" onclick="alert('제목: ${titleText} / 주인공: ${photo.target} / 좋아요: ${photo.likes || 0}')">
                         <img src="${photo.url}" alt="피드 사진">
                     </div>
                 `;
@@ -709,17 +823,45 @@
             gridContainer.innerHTML = html;
         }
 
-        async function addLike(id, currentLikes) {
+        async function addLike(id) {
+            const container = document.getElementById("galleryContainer");
+            const scrollLeft = container ? container.scrollLeft : 0;
+
+            const photo = photos.find(p => p.id === id);
+            if (!photo) return;
+
+            let likedUsers = photo.liked_users || [];
+            if (likedUsers.includes(currentUser)) {
+                alert("이미 좋아요를 누른 사진입니다!");
+                return;
+            }
+
+            likedUsers.push(currentUser);
+            const newLikes = (photo.likes || 0) + 1;
+
             const { error } = await supabaseClient
                 .from('photos')
-                .update({ likes: currentLikes + 1 })
+                .update({ likes: newLikes, liked_users: likedUsers })
                 .eq('id', id);
 
             if (error) {
                 alert("좋아요 반영 실패: " + error.message);
                 return;
             }
-            fetchPhotos();
+
+            const { data, error: fetchError } = await supabaseClient
+                .from('photos')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (!fetchError) {
+                photos = data || [];
+                renderGalleryList();
+                const updatedContainer = document.getElementById("galleryContainer");
+                if (updatedContainer) {
+                    updatedContainer.scrollLeft = scrollLeft;
+                }
+            }
         }
 
         async function deletePhoto(id, imageUrl) {
