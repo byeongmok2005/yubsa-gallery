@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>절친 비밀 엽사 갤러리</title>
+    <!-- PWA 및 모바일 최적화 설정 -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="YUBSA">
+    
     <!-- Supabase 라이브러리 CDN 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -408,22 +414,22 @@
             display: block;
         }
 
-        /* 더블클릭 시 나타나는 하트 애니메이션 스타일 (지속 시간 1초로 부드럽게 설정) */
+        /* 더블클릭 시 나타나는 하트 애니메이션 스타일 (유지시간 길게) */
         .heart-pop {
             position: absolute;
-            font-size: 4rem;
+            font-size: 5rem;
             color: #ef4444;
-            text-shadow: 0 0 10px rgba(0,0,0,0.3);
+            text-shadow: 0 0 15px rgba(0,0,0,0.4);
             pointer-events: none;
             opacity: 0;
             transform: scale(0.3);
-            transition: transform 0.5s ease, opacity 0.5s ease;
+            transition: transform 0.4s ease, opacity 0.4s ease;
             z-index: 10;
         }
 
         .heart-pop.animate {
             opacity: 1;
-            transform: scale(1.2);
+            transform: scale(1.3);
         }
 
         .photo-details { padding: 20px; }
@@ -1319,23 +1325,22 @@
             gridContainer.innerHTML = html;
         }
 
-        // 이미 좋아요를 누른 상태에서 더블클릭하면 애니메이션만 뜨고 좋아요 수는 증가하지 않음
         async function addLike(id) {
             const photo = photos.find(p => p.id === id);
             if (!photo) return;
 
             let likedUsers = Array.isArray(photo.liked_users) ? [...photo.liked_users] : [];
 
-            // 무조건 하트 애니메이션은 실행
+            // 하트 애니메이션 실행
             const popEl = document.getElementById(`heartPop_${id}`);
             if (popEl) {
                 popEl.classList.add('animate');
                 setTimeout(() => {
                     popEl.classList.remove('animate');
-                }, 1000); // 1초 동안 유지
+                }, 1000);
             }
 
-            // 이미 좋아요를 눌렀다면 좋아요 수 증가 로직은 건너뜀
+            // 이미 좋아요를 누른 경우 수량 증가 생략
             if (likedUsers.includes(currentUser)) {
                 return;
             }

@@ -1,0 +1,15 @@
+{
+  "name": "YUBSA",
+  "short_name": "YUBSA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='110' fill='%230f172a'/><text x='256' y='320' font-size='220' font-weight='bold' font-family='sans-serif' fill='%23ffffff' text-anchor='middle'>Y</text><text x='380' y='180' font-size='120' text-anchor='middle'>❤️</text></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
