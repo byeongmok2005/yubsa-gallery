@@ -10,23 +10,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="YUBSA">
     
-    <!-- PWA 매니페스트 (아이콘 파일 연결) -->
-    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,{
-      %22name%22: %22절친 비밀 엽사 갤러리%22,
-      %22short_name%22: %22YUBSA%22,
-      %22start_url%22: %22/%22,
-      %22display%22: %22standalone%22,
-      %22background_color%22: %22%230f172a%22,
-      %22theme_color%22: %22%230f172a%22,
-      %22icons%22: [
-        {
-          %22src%22: %22icon-192.png%22,
-          %22sizes%22: %22192x192 512x512 569x569%22,
-          %22type%22: %22image/png%22
-        }
-      ]
-    }">
-
+    <!-- PWA 매니페스트 (외부 파일 참조) -->
+    <link rel="manifest" href="./manifest.json">
+    
     <!-- Supabase 라이브러리 CDN 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -1455,6 +1441,14 @@
                 }
                 fetchPhotos();
             }
+        }
+
+        // 서비스 워커 등록 스크립트 추가
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(() => console.log('PWA 서비스 워커 등록 성공!'));
+            });
         }
 
         initApp();
