@@ -238,7 +238,8 @@
         .profile-info {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
+            flex: 1;
         }
 
         .profile-username {
@@ -246,10 +247,75 @@
             font-weight: 700;
         }
 
+        .profile-tier-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .profile-tier {
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .tier-tag {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 8px;
+            margin-left: 4px;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .tier-iron { background: #475569; color: #fff; }
+        .tier-bronze { background: #b45309; color: #fff; }
+        .tier-silver { background: #64748b; color: #fff; }
+        .tier-gold { background: #eab308; color: #000; }
+        .tier-platinum { background: #06b6d4; color: #fff; }
+        .tier-diamond { background: #3b82f6; color: #fff; }
+        .tier-master { background: #a855f7; color: #fff; }
+        .tier-challenger { background: #ef4444; color: #fff; box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+
+        .tier-progress-container {
+            margin-top: 6px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .tier-progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 8px;
+            background-color: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+
         .profile-stats {
             display: flex;
             gap: 20px;
             font-size: 0.95rem;
+            margin-top: 4px;
         }
 
         .profile-stats span b {
@@ -326,12 +392,38 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.02);
         }
 
+        .gallery-img-wrapper {
+            position: relative;
+            cursor: pointer;
+            background-color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
         .gallery-item img {
             width: 100%;
             max-height: 400px;
             object-fit: contain;
             display: block;
-            background-color: #ffffff;
+        }
+
+        /* 더블클릭 시 나타나는 하트 애니메이션 스타일 (지속 시간 1초로 부드럽게 설정) */
+        .heart-pop {
+            position: absolute;
+            font-size: 4rem;
+            color: #ef4444;
+            text-shadow: 0 0 10px rgba(0,0,0,0.3);
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(0.3);
+            transition: transform 0.5s ease, opacity 0.5s ease;
+            z-index: 10;
+        }
+
+        .heart-pop.animate {
+            opacity: 1;
+            transform: scale(1.2);
         }
 
         .photo-details { padding: 20px; }
@@ -368,13 +460,14 @@
         }
         .info-tag:hover { background-color: #e2e8f0; }
 
-        .likes-count {
+        .likes-display {
             font-size: 1.1rem;
             font-weight: 700;
             color: var(--danger);
             display: flex;
             align-items: center;
             gap: 6px;
+            cursor: pointer;
         }
 
         .action-buttons {
@@ -398,10 +491,7 @@
             transition: background-color 0.2s;
         }
 
-        .btn-like { background-color: #ffe4e6; color: var(--danger); }
-        .btn-like:hover { background-color: #fecdd3; }
-
-        .btn-delete { background-color: #f1f5f9; color: var(--text-main); border: 1px solid var(--border-color); }
+        .btn-delete { background-color: #f1f5f9; color: var(--text-main); border: 1px solid var(--border-color); width: 100%; }
         .btn-delete:hover { background-color: #e2e8f0; }
 
         .btn-back {
@@ -446,6 +536,9 @@
             font-weight: 700;
             color: var(--text-main);
             margin-right: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .comment-form {
@@ -532,20 +625,17 @@
         async function fetchMembers() {
             let set = new Set();
             
-            // 기본 멤버 고정 등록
-            ['박병목', '김병수', '김태용'].forEach(m => set.add(m));
+            ['박병목', '김병수', '김태용', '장민준'].forEach(m => set.add(m));
 
             if (currentUser) set.add(currentUser);
 
-            // 1. users 테이블에서 가입된 모든 닉네임 가져오기
-            const { data: userData, error: userError } = await supabaseClient.from('users').select('nickname');
+            const { data: userData } = await supabaseClient.from('users').select('nickname');
             if (userData) {
                 userData.forEach(u => {
                     if (u.nickname) set.add(u.nickname);
                 });
             }
 
-            // 2. comments 테이블 작성자 추가
             const { data: commentData } = await supabaseClient.from('comments').select('author');
             if (commentData) {
                 commentData.forEach(c => {
@@ -553,8 +643,7 @@
                 });
             }
 
-            // 3. photos 테이블 target 및 uploader 추가
-            const { data, error } = await supabaseClient.from('photos').select('target, uploader');
+            const { data } = await supabaseClient.from('photos').select('target, uploader');
             if (data) {
                 data.forEach(p => {
                     if (p.target) {
@@ -576,6 +665,27 @@
                 });
             }
             members = Array.from(set);
+        }
+
+        function getUploaderTotalLikes(userName) {
+            let total = 0;
+            photos.forEach(p => {
+                if (p.uploader && p.uploader.toLowerCase() === userName.toLowerCase()) {
+                    total += (p.likes || 0);
+                }
+            });
+            return total;
+        }
+
+        function getTierInfo(likes) {
+            if (likes === 0) return { name: 'Iron', class: 'tier-iron', hex: '#475569', min: 0, max: 0 };
+            if (likes <= 10) return { name: 'Bronze', class: 'tier-bronze', hex: '#b45309', min: 1, max: 10 };
+            if (likes <= 20) return { name: 'Silver', class: 'tier-silver', hex: '#64748b', min: 11, max: 20 };
+            if (likes <= 30) return { name: 'Gold', class: 'tier-gold', hex: '#eab308', min: 21, max: 30 };
+            if (likes <= 40) return { name: 'Platinum', class: 'tier-platinum', hex: '#06b6d4', min: 31, max: 40 };
+            if (likes <= 50) return { name: 'Diamond', class: 'tier-diamond', hex: '#3b82f6', min: 41, max: 50 };
+            if (likes <= 60) return { name: 'Master', class: 'tier-master', hex: '#a855f7', min: 51, max: 60 };
+            return { name: 'Challenger', class: 'tier-challenger', hex: '#ef4444', min: 61, max: 61 };
         }
 
         function renderAuthArea() {
@@ -704,11 +814,7 @@
             }
 
             const targetName = currentUser;
-
-            // users 테이블에서 해당 닉네임 삭제
             await supabaseClient.from('users').delete().eq('nickname', targetName);
-
-            // 로그아웃 처리
             await supabaseClient.auth.signOut();
             currentUser = "";
             localStorage.removeItem('yubsa_user');
@@ -755,6 +861,24 @@
             if (selectedProfile) {
                 const userPhotos = photos.filter(p => photoHasTarget(p.target, selectedProfile));
                 const totalLikes = userPhotos.reduce((sum, p) => sum + (p.likes || 0), 0);
+                
+                const uploadedLikes = getUploaderTotalLikes(selectedProfile);
+                const tier = getTierInfo(uploadedLikes);
+
+                let progressPercent = 100;
+                let remainingLikes = 0;
+                if (tier.name === 'Challenger') {
+                    progressPercent = 100;
+                    remainingLikes = 0;
+                } else if (tier.name === 'Iron') {
+                    progressPercent = uploadedLikes > 0 ? 100 : 0;
+                    remainingLikes = Math.max(0, 1 - uploadedLikes);
+                } else {
+                    let rangeSpan = (tier.max - tier.min) + 1;
+                    let currentProgressInTier = (uploadedLikes - tier.min) + 1;
+                    progressPercent = Math.min(100, Math.max(0, (currentProgressInTier / rangeSpan) * 100));
+                    remainingLikes = Math.max(0, tier.max - uploadedLikes);
+                }
 
                 contentArea.innerHTML = `
                     ${noticeHtml}
@@ -768,9 +892,24 @@
                             <div class="profile-avatar">${selectedProfile.charAt(0)}</div>
                             <div class="profile-info">
                                 <div class="profile-username">🎯 ${selectedProfile}</div>
+                                <div class="profile-tier-row">
+                                    <span class="profile-tier ${tier.class}">🏆 ${tier.name}</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">업로드 총 좋아요: <b>${uploadedLikes}개</b></span>
+                                </div>
+                                
+                                <div class="tier-progress-container">
+                                    <div class="tier-progress-info">
+                                        <span>${tier.name === 'Challenger' ? '최고 등급 달성!' : `다음 티어까지 남은 좋아요`}</span>
+                                        <span><b>${remainingLikes}개</b></span>
+                                    </div>
+                                    <div class="progress-bar-bg">
+                                        <div class="progress-bar-fill" style="width: ${progressPercent}%; background-color: ${tier.hex};"></div>
+                                    </div>
+                                </div>
+
                                 <div class="profile-stats">
                                     <span>게시물 <b>${userPhotos.length}</b></span>
-                                    <span>받은 좋아요 <b>${totalLikes}</b></span>
+                                    <span>태그된 피드 좋아요 <b>${totalLikes}</b></span>
                                 </div>
                             </div>
                         </div>
@@ -1074,16 +1213,22 @@
                     }
                 });
 
+                let likedUsers = Array.isArray(photo.liked_users) ? photo.liked_users : [];
+                let hasLiked = likedUsers.includes(currentUser);
+                let heartIcon = hasLiked ? '❤️' : '🤍';
+
                 let photoComments = commentsMap[photo.id] || [];
                 let commentsHtml = "";
                 photoComments.forEach(c => {
                     let canModifyComment = (c.author === currentUser);
+                    let authorUploadedLikes = getUploaderTotalLikes(c.author);
+                    let authorTier = getTierInfo(authorUploadedLikes);
                     
                     if (editingCommentId === c.id) {
                         commentsHtml += `
                             <div class="comment-item" style="flex-direction: column; align-items: stretch; gap: 6px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span class="comment-author">${c.author}</span>
+                                    <span class="comment-author">${c.author} <span class="tier-tag ${authorTier.class}">${authorTier.name}</span></span>
                                     <span style="font-size:0.75rem; color:var(--text-muted);">수정 중...</span>
                                 </div>
                                 <div style="display: flex; gap: 4px;">
@@ -1096,7 +1241,13 @@
                     } else {
                         commentsHtml += `
                             <div class="comment-item">
-                                <div><span class="comment-author">${c.author}</span>${c.content}</div>
+                                <div>
+                                    <span class="comment-author">
+                                        ${c.author} 
+                                        <span class="tier-tag ${authorTier.class}">${authorTier.name}</span>
+                                    </span>
+                                    ${c.content}
+                                </div>
                                 ${canModifyComment ? `
                                 <div style="display: flex; gap: 6px; font-size: 0.75rem;">
                                     <span style="cursor:pointer; color:var(--accent);" onclick="startEditComment(${c.id}, '${c.content.replace(/'/g, "\\'")}')">수정</span>
@@ -1109,27 +1260,27 @@
 
                 html += `
                     <div class="gallery-item">
-                        <img src="${photo.url}" alt="엽사">
+                        <div class="gallery-img-wrapper" ondblclick="addLike(${photo.id})" title="더블클릭하여 좋아요 ❤️">
+                            <img src="${photo.url}" alt="엽사">
+                            <div class="heart-pop" id="heartPop_${photo.id}">❤️</div>
+                        </div>
                         <div class="photo-details">
                             <div class="photo-title-text">📌 ${titleText}</div>
                             <div class="info-row">
                                 <div class="target-tags-container">
                                     ${tagsHtml}
                                 </div>
-                                <div class="likes-count">
-                                    ❤️ ${photo.likes || 0}
+                                <div class="likes-display" onclick="toggleLikeDirect(${photo.id})" title="클릭하여 좋아요 토글">
+                                    ${heartIcon} ${photo.likes || 0}
                                 </div>
                             </div>
                             
+                            ${canDelete ? `
                             <div class="action-buttons">
-                                <button class="action-btn btn-like" onclick="addLike(${photo.id})">
-                                    👍 좋아요
-                                </button>
-                                ${canDelete ? `
                                 <button class="action-btn btn-delete" onclick="deletePhoto(${photo.id}, '${photo.url}')">
                                     🗑️ 삭제
-                                </button>` : ''}
-                            </div>
+                                </button>
+                            </div>` : ''}
 
                             <div class="comments-section">
                                 <div class="comments-list">
@@ -1168,25 +1319,75 @@
             gridContainer.innerHTML = html;
         }
 
+        // 이미 좋아요를 누른 상태에서 더블클릭하면 애니메이션만 뜨고 좋아요 수는 증가하지 않음
         async function addLike(id) {
+            const photo = photos.find(p => p.id === id);
+            if (!photo) return;
+
+            let likedUsers = Array.isArray(photo.liked_users) ? [...photo.liked_users] : [];
+
+            // 무조건 하트 애니메이션은 실행
+            const popEl = document.getElementById(`heartPop_${id}`);
+            if (popEl) {
+                popEl.classList.add('animate');
+                setTimeout(() => {
+                    popEl.classList.remove('animate');
+                }, 1000); // 1초 동안 유지
+            }
+
+            // 이미 좋아요를 눌렀다면 좋아요 수 증가 로직은 건너뜀
+            if (likedUsers.includes(currentUser)) {
+                return;
+            }
+
+            const container = document.getElementById("galleryContainer");
+            const scrollLeft = container ? container.scrollLeft : 0;
+
+            likedUsers.push(currentUser);
+            const newLikes = (photo.likes || 0) + 1;
+
+            const { error } = await supabaseClient
+                .from('photos')
+                .update({ likes: newLikes, liked_users: likedUsers })
+                .eq('id', id);
+
+            if (error) {
+                alert("좋아요 반영 실패: " + error.message);
+                return;
+            }
+
+            const { data, error: fetchError } = await supabaseClient
+                .from('photos')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (!fetchError) {
+                photos = data || [];
+                renderGalleryList();
+                const updatedContainer = document.getElementById("galleryContainer");
+                if (updatedContainer) {
+                    updatedContainer.scrollLeft = scrollLeft;
+                }
+            }
+        }
+
+        async function toggleLikeDirect(id) {
             const container = document.getElementById("galleryContainer");
             const scrollLeft = container ? container.scrollLeft : 0;
 
             const photo = photos.find(p => p.id === id);
             if (!photo) return;
 
-            let likedUsers = photo.liked_users;
-            if (!Array.isArray(likedUsers)) {
-                likedUsers = [];
-            }
+            let likedUsers = Array.isArray(photo.liked_users) ? [...photo.liked_users] : [];
+            let newLikes = photo.likes || 0;
 
             if (likedUsers.includes(currentUser)) {
-                alert("이미 좋아요를 누른 사진입니다!");
-                return;
+                likedUsers = likedUsers.filter(u => u !== currentUser);
+                newLikes = Math.max(0, newLikes - 1);
+            } else {
+                likedUsers.push(currentUser);
+                newLikes += 1;
             }
-
-            likedUsers.push(currentUser);
-            const newLikes = (photo.likes || 0) + 1;
 
             const { error } = await supabaseClient
                 .from('photos')
