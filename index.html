@@ -148,7 +148,6 @@
         select:focus { outline: none; border-color: var(--accent); }
         input[type="file"] { padding: 8px; font-size: 0.9rem; }
 
-        /* 다중 선택 체크박스 그룹 스타일 */
         .checkbox-group {
             display: flex;
             flex-wrap: wrap;
@@ -507,6 +506,7 @@
         let members = [];
         let isSignUpMode = false;
         let selectedProfile = null;
+        let editingCommentId = null; // 현재 수정 중인 댓글 ID 관리
 
         async function initApp() {
             const { data: { session } } = await supabaseClient.auth.getSession();
@@ -538,13 +538,21 @@
             if (data) {
                 data.forEach(p => {
                     if (p.target) {
+                        let targets = [];
                         if (Array.isArray(p.target)) {
-                            p.target.forEach(t => set.add(t));
+                            targets = p.target;
                         } else if (typeof p.target === 'string') {
-                            p.target.split(',').forEach(t => set.add(t.trim()));
+                            let cleanStr = p.target.replace(/[{}[\]"']/g, '');
+                            targets = cleanStr.split(',').map(t => t.trim());
                         }
+                        
+                        targets.forEach(t => {
+                            if (t && t.length < 10 && !t.includes('{') && !t.includes('}') && !t.includes('[') && !t.includes(']')) {
+                                set.add(t);
+                            }
+                        });
                     }
-                    if (p.uploader) set.add(p.uploader);
+                    if (p.uploader && p.uploader.length < 10) set.add(p.uploader);
                 });
             }
             members = Array.from(set);
@@ -666,14 +674,14 @@
             initApp();
         }
 
-        // 사진 속 인물이 포함되어 있는지 확인하는 헬퍼 함수
         function photoHasTarget(photoTarget, profileName) {
             if (!photoTarget) return false;
             let targets = [];
             if (Array.isArray(photoTarget)) {
                 targets = photoTarget;
             } else if (typeof photoTarget === 'string') {
-                targets = photoTarget.split(',').map(t => t.trim());
+                let cleanStr = photoTarget.replace(/[{}[\]"']/g, '');
+                targets = cleanStr.split(',').map(t => t.trim());
             }
             return targets.some(t => t.toLowerCase() === profileName.toLowerCase());
         }
@@ -897,6 +905,47 @@
             }
         }
 
+        function startEditComment(commentId, currentContent) {
+            editingCommentId = commentId;
+            renderGalleryList();
+            // 수정용 입력창에 기존 텍스트 채우기 및 포커스
+            const editInput = document.getElementById(`editInput_${commentId}`);
+            if (editInput) {
+                editInput.value = currentContent;
+                editInput.focus();
+            }
+        }
+
+        function cancelEditComment() {
+            editingCommentId = null;
+            renderGalleryList();
+        }
+
+        async function updateComment(commentId) {
+            const editInput = document.getElementById(`editInput_${commentId}`);
+            if (!editInput) return;
+            const newContent = editInput.value.trim();
+
+            if (!newContent) {
+                alert("수정할 내용을 입력해주세요!");
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('comments')
+                .update({ content: newContent })
+                .eq('id', commentId);
+
+            if (error) {
+                alert("댓글 수정 실패: " + error.message);
+                return;
+            }
+
+            editingCommentId = null;
+            await fetchComments();
+            renderGalleryList();
+        }
+
         async function uploadPhoto() {
             const photoTitle = document.getElementById("photoTitle").value.trim();
             const checkboxes = document.querySelectorAll('input[name="targetMember"]:checked');
@@ -974,24 +1023,50 @@
                 if (Array.isArray(photo.target)) {
                     targets = photo.target;
                 } else if (typeof photo.target === 'string') {
-                    targets = photo.target.split(',').map(t => t.trim());
+                    let cleanStr = photo.target.replace(/[{}[\]"']/g, '');
+                    targets = cleanStr.split(',').map(t => t.trim());
                 }
 
                 let tagsHtml = "";
                 targets.forEach(t => {
-                    tagsHtml += `<span class="info-tag" onclick="openProfile('${t}')">🎯 ${t}</span>`;
+                    if (t && !t.includes('{') && !t.includes('}') && !t.includes('[') && !t.includes(']')) {
+                        tagsHtml += `<span class="info-tag" onclick="openProfile('${t}')">🎯 ${t}</span>`;
+                    }
                 });
 
                 let photoComments = commentsMap[photo.id] || [];
                 let commentsHtml = "";
                 photoComments.forEach(c => {
-                    let canDeleteComment = (c.author === currentUser);
-                    commentsHtml += `
-                        <div class="comment-item">
-                            <div><span class="comment-author">${c.author}</span>${c.content}</div>
-                            ${canDeleteComment ? `<span style="cursor:pointer; color:var(--danger); font-size:0.75rem;" onclick="deleteComment(${c.id})">삭제</span>` : ''}
-                        </div>
-                    `;
+                    let canModifyComment = (c.author === currentUser);
+                    
+                    if (editingCommentId === c.id) {
+                        // 수정 모드일 때 보여줄 UI
+                        commentsHtml += `
+                            <div class="comment-item" style="flex-direction: column; align-items: stretch; gap: 6px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span class="comment-author">${c.author}</span>
+                                    <span style="font-size:0.75rem; color:var(--text-muted);">수정 중...</span>
+                                </div>
+                                <div style="display: flex; gap: 4px;">
+                                    <input type="text" id="editInput_${c.id}" class="comment-input" style="padding: 6px;">
+                                    <button onclick="updateComment(${c.id})" style="padding: 4px 8px; font-size:0.75rem; background:var(--text-main); color:#fff; border:none; border-radius:4px; cursor:pointer;">저장</button>
+                                    <button onclick="cancelEditComment()" style="padding: 4px 8px; font-size:0.75rem; background:#cbd5e1; border:none; border-radius:4px; cursor:pointer;">취소</button>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // 일반 보기 모드
+                        commentsHtml += `
+                            <div class="comment-item">
+                                <div><span class="comment-author">${c.author}</span>${c.content}</div>
+                                ${canModifyComment ? `
+                                <div style="display: flex; gap: 6px; font-size: 0.75rem;">
+                                    <span style="cursor:pointer; color:var(--accent);" onclick="startEditComment(${c.id}, '${c.content.replace(/'/g, "\\'")}')">수정</span>
+                                    <span style="cursor:pointer; color:var(--danger);" onclick="deleteComment(${c.id})">삭제</span>
+                                </div>` : ''}
+                            </div>
+                        `;
+                    }
                 });
 
                 html += `
