@@ -506,7 +506,7 @@
         let members = [];
         let isSignUpMode = false;
         let selectedProfile = null;
-        let editingCommentId = null; // 현재 수정 중인 댓글 ID 관리
+        let editingCommentId = null;
 
         async function initApp() {
             const { data: { session } } = await supabaseClient.auth.getSession();
@@ -531,9 +531,29 @@
 
         async function fetchMembers() {
             let set = new Set();
-            if (currentUser) set.add(currentUser);
+            
+            // 기본 멤버 고정 등록
             ['박병목', '김병수', '김태용'].forEach(m => set.add(m));
 
+            if (currentUser) set.add(currentUser);
+
+            // 1. users 테이블에서 가입된 모든 닉네임 가져오기
+            const { data: userData, error: userError } = await supabaseClient.from('users').select('nickname');
+            if (userData) {
+                userData.forEach(u => {
+                    if (u.nickname) set.add(u.nickname);
+                });
+            }
+
+            // 2. comments 테이블 작성자 추가
+            const { data: commentData } = await supabaseClient.from('comments').select('author');
+            if (commentData) {
+                commentData.forEach(c => {
+                    if (c.author && c.author.length < 10) set.add(c.author);
+                });
+            }
+
+            // 3. photos 테이블 target 및 uploader 추가
             const { data, error } = await supabaseClient.from('photos').select('target, uploader');
             if (data) {
                 data.forEach(p => {
@@ -565,6 +585,7 @@
                     <div class="user-welcome">
                         <span><b>${currentUser}</b>님</span>
                         <button class="auth-btn" onclick="logout()" style="width: auto; padding: 6px 12px; font-size: 0.8rem; background-color: #64748b; border:none; border-radius:6px; color:#fff; cursor:pointer;">로그아웃</button>
+                        <button class="auth-btn" onclick="deleteAccount()" style="width: auto; padding: 6px 12px; font-size: 0.8rem; background-color: var(--danger); border:none; border-radius:6px; color:#fff; cursor:pointer;">계정 삭제</button>
                     </div>
                 `;
             } else {
@@ -643,8 +664,8 @@
                     return;
                 }
 
-                localStorage.setItem('yubsa_new_user', nickname);
-                localStorage.setItem('yubsa_signup_time', Date.now().toString());
+                await supabaseClient.from('users').insert([{ nickname: nickname }]);
+                sessionStorage.setItem('yubsa_welcome_user', nickname);
 
                 alert("회원가입 완료! 로그인되었습니다.");
                 currentUser = nickname;
@@ -661,6 +682,8 @@
 
                 const userMeta = data.user.user_metadata;
                 currentUser = userMeta && userMeta.nickname ? userMeta.nickname : email.split('@')[0];
+                
+                await supabaseClient.from('users').upsert([{ nickname: currentUser }], { onConflict: 'nickname' });
             }
 
             localStorage.setItem('yubsa_user', currentUser);
@@ -671,6 +694,27 @@
             await supabaseClient.auth.signOut();
             currentUser = "";
             localStorage.removeItem('yubsa_user');
+            sessionStorage.removeItem('yubsa_welcome_user');
+            initApp();
+        }
+
+        async function deleteAccount() {
+            if (!confirm(`정말 ${currentUser} 계정을 삭제하시겠습니까?\n(등록된 사용자 목록에서 닉네임이 제거되며 로그아웃됩니다.)`)) {
+                return;
+            }
+
+            const targetName = currentUser;
+
+            // users 테이블에서 해당 닉네임 삭제
+            await supabaseClient.from('users').delete().eq('nickname', targetName);
+
+            // 로그아웃 처리
+            await supabaseClient.auth.signOut();
+            currentUser = "";
+            localStorage.removeItem('yubsa_user');
+            sessionStorage.removeItem('yubsa_welcome_user');
+
+            alert("계정 정보가 삭제되었습니다.");
             initApp();
         }
 
@@ -690,16 +734,13 @@
             const contentArea = document.getElementById("contentArea");
             
             let noticeHtml = "";
-            const newUser = localStorage.getItem('yubsa_new_user');
-            const signupTime = parseInt(localStorage.getItem('yubsa_signup_time') || '0', 10);
-            const now = Date.now();
-            const FIVE_MINUTES = 5 * 60 * 1000;
+            const welcomeUser = sessionStorage.getItem('yubsa_welcome_user');
 
-            if (newUser && (now - signupTime < FIVE_MINUTES)) {
+            if (welcomeUser) {
                 noticeHtml = `
                     <div class="notice-card">
                         <div class="notice-title">📢 긴급 공지</div>
-                        <div class="notice-content">🎉 신규가입자 <b>${newUser}</b> 님 환영합니다~!</div>
+                        <div class="notice-content">🎉 신규가입자 <b>${welcomeUser}</b> 님 환영합니다~!</div>
                     </div>
                 `;
             } else {
@@ -908,7 +949,6 @@
         function startEditComment(commentId, currentContent) {
             editingCommentId = commentId;
             renderGalleryList();
-            // 수정용 입력창에 기존 텍스트 채우기 및 포커스
             const editInput = document.getElementById(`editInput_${commentId}`);
             if (editInput) {
                 editInput.value = currentContent;
@@ -1040,7 +1080,6 @@
                     let canModifyComment = (c.author === currentUser);
                     
                     if (editingCommentId === c.id) {
-                        // 수정 모드일 때 보여줄 UI
                         commentsHtml += `
                             <div class="comment-item" style="flex-direction: column; align-items: stretch; gap: 6px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1055,7 +1094,6 @@
                             </div>
                         `;
                     } else {
-                        // 일반 보기 모드
                         commentsHtml += `
                             <div class="comment-item">
                                 <div><span class="comment-author">${c.author}</span>${c.content}</div>
