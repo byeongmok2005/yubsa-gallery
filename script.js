@@ -19,6 +19,7 @@ let customRoomNames = {};
 let dmMessages = [];
 let myRooms = [];
 let isCreatingRoom = false;
+let unreadNotifications = [];
 
 async function initApp() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -38,7 +39,94 @@ async function initApp() {
     } else {
         renderMainContent();
         fetchPhotos();
+        setupRealtimeSubscriptions();
     }
+}
+
+// 💡 실시간 알림 구독 설정
+function setupRealtimeSubscriptions() {
+    supabaseClient
+        .channel('public-db-changes')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, payload => {
+            if (payload.new && payload.new.uploader !== currentUser) {
+                addNotification(`📸 [${payload.new.uploader}]님이 새로운 엽사를 올렸습니다!`);
+            }
+            fetchPhotos();
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
+            if (payload.new && payload.new.author !== currentUser) {
+                addNotification(`💬 [${payload.new.author}]님이 댓글을 남겼습니다.`);
+            }
+            fetchComments();
+            renderGalleryList();
+        })
+        .subscribe();
+}
+
+function addNotification(text) {
+    unreadNotifications.unshift({ text, time: new Date().toLocaleTimeString() });
+    updateNotifBadge();
+}
+
+function updateNotifBadge() {
+    const badge = document.getElementById("notifBadge");
+    if (!badge) return;
+    if (unreadNotifications.length > 0) {
+        badge.innerText = unreadNotifications.length;
+        badge.style.display = "block";
+    } else {
+        badge.style.display = "none";
+    }
+}
+
+function openNotifications() {
+    const existingModal = document.getElementById("notifModalOverlay");
+    if (existingModal) existingModal.remove();
+
+    let contentHtml = "";
+    if (unreadNotifications.length === 0) {
+        contentHtml = `<p style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 0.9rem;">새로운 알림이 없습니다.</p>`;
+    } else {
+        contentHtml = unreadNotifications.map(n => `
+            <div class="notification-item">
+                <div style="font-weight: 700; color: var(--text-main); margin-bottom: 2px;">${n.text}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">${n.time}</div>
+            </div>
+        `).join('');
+    }
+
+    const modalOverlay = document.createElement("div");
+    modalOverlay.id = "notifModalOverlay";
+    modalOverlay.className = "notification-modal-overlay";
+    modalOverlay.onclick = (e) => {
+        if (e.target === modalOverlay) closeNotificationModal();
+    };
+
+    modalOverlay.innerHTML = `
+        <div class="notification-modal">
+            <div class="notification-modal-title">
+                <span>📢 새로운 알림 내역</span>
+                <button onclick="closeNotificationModal()" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-main);">✕</button>
+            </div>
+            <div class="notification-list-box">
+                ${contentHtml}
+            </div>
+            <button class="btn-primary" onclick="clearNotifications()" style="margin-top: 0;">알림 모두 읽음 처리</button>
+        </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+}
+
+function closeNotificationModal() {
+    const modalOverlay = document.getElementById("notifModalOverlay");
+    if (modalOverlay) modalOverlay.remove();
+}
+
+function clearNotifications() {
+    unreadNotifications = [];
+    updateNotifBadge();
+    closeNotificationModal();
 }
 
 function toggleSidebar() {
@@ -322,6 +410,7 @@ function renderMainContent() {
         </div>
     `;
     renderGalleryList();
+    updateNotifBadge();
 }
 
 function renderMyProfileView(contentArea) {
