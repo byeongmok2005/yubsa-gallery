@@ -251,7 +251,6 @@
         }
         .btn-primary:hover { background-color: #334155; }
 
-        /* 💡 갤러리 내부 스크롤 설정 */
         .gallery-container {
             display: flex;
             flex-direction: column;
@@ -451,7 +450,6 @@
         }
         .btn-back:hover { background-color: #cbd5e1; }
 
-        /* 💡 프로필 그리드 (인스타그램 스타일 3분할) */
         .instagram-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -474,7 +472,6 @@
             display: block;
         }
 
-        /* 💡 알림 모달창 스타일 */
         .notification-modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -530,7 +527,7 @@
             <span>🧭 YUBSA 메뉴</span>
             <span style="cursor:pointer; font-size:1.2rem;" onclick="toggleSidebar()">✕</span>
         </div>
-        <ul class="sidebar-menu-list">
+        <ul class="sidebar-menu-list" id="sidebarMenuList">
             <li class="sidebar-menu-item" onclick="navigateTo('home')">🏠 홈 / 갤러리</li>
             <li class="sidebar-menu-item" onclick="navigateTo('myProfile')">👤 내 프로필</li>
             <li class="sidebar-menu-item" onclick="navigateTo('friends')">👥 친구 관리</li>

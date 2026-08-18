@@ -34,6 +34,7 @@ async function initApp() {
 
     await fetchMembers();
     renderAuthArea();
+    renderSidebarMenu(); // 💡 관리자 메뉴 노출 갱신
     if (!currentUser) {
         renderAuthScreen();
     } else {
@@ -43,7 +44,28 @@ async function initApp() {
     }
 }
 
-// 💡 실시간 알림 구독 설정
+// 💡 사이드바 메뉴 동적 렌더링 (박병목 계정일 때만 관리자 페이지 표시)
+function renderSidebarMenu() {
+    const menuList = document.getElementById("sidebarMenuList");
+    if (!menuList) return;
+
+    let adminMenuHtml = "";
+    if (currentUser === '박병목') {
+        adminMenuHtml = `<li class="sidebar-menu-item" onclick="navigateTo('admin')">👑 관리자 페이지 (제안/문의)</li>`;
+    }
+
+    menuList.innerHTML = `
+        <li class="sidebar-menu-item" onclick="navigateTo('home')">🏠 홈 / 갤러리</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('myProfile')">👤 내 프로필</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('friends')">👥 친구 관리</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('dm')">💬 DM</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('featureRequest')">💡 기능 제안</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('inquiry')">📞 문의 하기</li>
+        ${adminMenuHtml}
+        <li class="sidebar-menu-item" onclick="navigateTo('settings')">⚙️ 설정</li>
+    `;
+}
+
 function setupRealtimeSubscriptions() {
     supabaseClient
         .channel('public-db-changes')
@@ -340,6 +362,9 @@ function renderMainContent() {
     } else if (currentView === 'dm') {
         renderDmView(contentArea);
         return;
+    } else if (currentView === 'admin') {
+        renderAdminView(contentArea);
+        return;
     } else if (currentView === 'settings') {
         renderSettingsView(contentArea);
         return;
@@ -411,6 +436,53 @@ function renderMainContent() {
     `;
     renderGalleryList();
     updateNotifBadge();
+}
+
+// 💡 관리자 전용 제안/문의 조회 화면 렌더링 함수
+async function renderAdminView(contentArea) {
+    if (currentUser !== '박병목') {
+        contentArea.innerHTML = `<div class="card"><p style="text-align:center; color:var(--danger); font-weight:700;">접근 권한이 없습니다.</p></div>`;
+        return;
+    }
+
+    const { data, error } = await supabaseClient
+        .from('inquiries')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    let listHtml = "";
+    if (error || !data || data.length === 0) {
+        listHtml = `<p class="empty-msg">접수된 제안이나 문의가 없습니다.</p>`;
+    } else {
+        data.forEach(item => {
+            let typeBadge = item.type === 'feature' ? '<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:700;">기능제안</span>' : '<span style="background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:700;">문의하기</span>';
+            listHtml += `
+                <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            ${typeBadge}
+                            <span style="font-weight: 700; font-size: 0.9rem;">${item.author}</span>
+                        </div>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">${new Date(item.created_at).toLocaleString()}</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-main); word-break: break-all; margin-top: 4px;">${item.content}</div>
+                </div>
+            `;
+        });
+    }
+
+    contentArea.innerHTML = `
+        <div class="card">
+            <div class="card-title">
+                <span>👑 관리자 페이지 (제안 & 문의)</span>
+                <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
+            </div>
+            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">박병목 관리자만 볼 수 있는 접수 내역입니다.</p>
+            <div style="display: flex; flex-direction: column; max-height: 500px; overflow-y: auto;">
+                ${listHtml}
+            </div>
+        </div>
+    `;
 }
 
 function renderMyProfileView(contentArea) {
