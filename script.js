@@ -34,7 +34,7 @@ async function initApp() {
 
     await fetchMembers();
     renderAuthArea();
-    renderSidebarMenu(); // 💡 관리자 메뉴 노출 갱신
+    renderSidebarMenu();
     if (!currentUser) {
         renderAuthScreen();
     } else {
@@ -44,14 +44,13 @@ async function initApp() {
     }
 }
 
-// 💡 사이드바 메뉴 동적 렌더링 (박병목 계정일 때만 관리자 페이지 표시)
 function renderSidebarMenu() {
     const menuList = document.getElementById("sidebarMenuList");
     if (!menuList) return;
 
     let adminMenuHtml = "";
     if (currentUser === '박병목') {
-        adminMenuHtml = `<li class="sidebar-menu-item" onclick="navigateTo('admin')">👑 관리자 페이지 (제안/문의)</li>`;
+        adminMenuHtml = `<li class="sidebar-menu-item" onclick="navigateTo('admin')">👑 관리자 페이지</li>`;
     }
 
     menuList.innerHTML = `
@@ -231,15 +230,39 @@ function getUploaderTotalLikes(userName) {
     return total;
 }
 
-function getTierInfo(likes) {
-    if (likes === 0) return { name: 'Iron', class: 'tier-iron', hex: '#475569', min: 0, max: 0 };
-    if (likes <= 10) return { name: 'Bronze', class: 'tier-bronze', hex: '#b45309', min: 1, max: 10 };
-    if (likes <= 20) return { name: 'Silver', class: 'tier-silver', hex: '#64748b', min: 11, max: 20 };
-    if (likes <= 30) return { name: 'Gold', class: 'tier-gold', hex: '#eab308', min: 21, max: 30 };
-    if (likes <= 40) return { name: 'Platinum', class: 'tier-platinum', hex: '#06b6d4', min: 31, max: 40 };
-    if (likes <= 50) return { name: 'Diamond', class: 'tier-diamond', hex: '#3b82f6', min: 41, max: 50 };
-    if (likes <= 60) return { name: 'Master', class: 'tier-master', hex: '#a855f7', min: 51, max: 60 };
+function getUserTotalComments(userName) {
+    let total = 0;
+    const allComments = Object.values(commentsMap).flat();
+    allComments.forEach(c => {
+        if (c.author && c.author.toLowerCase() === userName.toLowerCase()) {
+            total += 1;
+        }
+    });
+    return total;
+}
+
+function getTierInfo(score) {
+    if (score === 0) return { name: 'Iron', class: 'tier-iron', hex: '#475569', min: 0, max: 0 };
+    if (score <= 10) return { name: 'Bronze', class: 'tier-bronze', hex: '#b45309', min: 1, max: 10 };
+    if (score <= 20) return { name: 'Silver', class: 'tier-silver', hex: '#64748b', min: 11, max: 20 };
+    if (score <= 30) return { name: 'Gold', class: 'tier-gold', hex: '#eab308', min: 21, max: 30 };
+    if (score <= 40) return { name: 'Platinum', class: 'tier-platinum', hex: '#06b6d4', min: 31, max: 40 };
+    if (score <= 50) return { name: 'Diamond', class: 'tier-diamond', hex: '#3b82f6', min: 41, max: 50 };
+    if (score <= 60) return { name: 'Master', class: 'tier-master', hex: '#a855f7', min: 51, max: 60 };
     return { name: 'Challenger', class: 'tier-challenger', hex: '#ef4444', min: 61, max: 61 };
+}
+
+const tierRanks = { 'Iron': 0, 'Bronze': 1, 'Silver': 2, 'Gold': 3, 'Platinum': 4, 'Diamond': 5, 'Master': 6, 'Challenger': 7 };
+
+function getCombinedTier(likes, comments) {
+    let likeTier = getTierInfo(likes);
+    let commentTier = getTierInfo(comments);
+    
+    if (tierRanks[likeTier.name] <= tierRanks[commentTier.name]) {
+        return likeTier;
+    } else {
+        return commentTier;
+    }
 }
 
 function renderAuthArea() {
@@ -438,23 +461,113 @@ function renderMainContent() {
     updateNotifBadge();
 }
 
-// 💡 관리자 전용 제안/문의 조회 화면 렌더링 함수
 async function renderAdminView(contentArea) {
     if (currentUser !== '박병목') {
         contentArea.innerHTML = `<div class="card"><p style="text-align:center; color:var(--danger); font-weight:700;">접근 권한이 없습니다.</p></div>`;
         return;
     }
 
-    const { data, error } = await supabaseClient
-        .from('inquiries')
-        .select('*')
-        .order('created_at', { ascending: false });
+    const [{ data: inquiriesData }, { data: reportsData }] = await Promise.all([
+        supabaseClient.from('inquiries').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('reports').select('*')
+    ]);
+
+    let userReportDetails = {};
+    let userReportCounts = {};
+
+    if (reportsData) {
+        reportsData.forEach(r => {
+            let targetAuthor = "알 수 없음";
+            let descHtml = "";
+
+            if (r.target_type === 'photo') {
+                let p = photos.find(item => Number(item.id) === Number(r.target_id));
+                if (p) {
+                    targetAuthor = p.uploader || "알 수 없음";
+                    descHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding-bottom: 4px; margin-bottom: 4px;">
+                            <div>📸 [사진] "${p.title || '제목 없음'}" (신고한 사람: ${r.reporter})</div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn-back" onclick="adminDeletePhoto(${p.id}, '${p.url}')" style="font-size:0.7rem; padding: 2px 6px; background:#fee2e2; color:var(--danger);">사진 삭제</button>
+                                <button class="btn-back" onclick="cancelReport(${r.id})" style="font-size:0.7rem; padding: 2px 6px; background:#f1f5f9; color:#475569;">신고 취소</button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    targetAuthor = "박병목";
+                    descHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding-bottom: 4px; margin-bottom: 4px;">
+                            <div>📸 [사진] ID: ${r.target_id} (신고한 사람: ${r.reporter})</div>
+                            <button class="btn-back" onclick="cancelReport(${r.id})" style="font-size:0.7rem; padding: 2px 6px; background:#f1f5f9; color:#475569;">신고 취소</button>
+                        </div>
+                    `;
+                }
+            } else if (r.target_type === 'comment') {
+                let allComments = Object.values(commentsMap).flat();
+                let c = allComments.find(item => Number(item.id) === Number(r.target_id));
+                if (c) {
+                    targetAuthor = c.author || "알 수 없음";
+                    descHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding-bottom: 4px; margin-bottom: 4px;">
+                            <div>💬 [댓글] "${c.content}" (신고한 사람: ${r.reporter})</div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn-back" onclick="adminDeleteComment(${c.id})" style="font-size:0.7rem; padding: 2px 6px; background:#fee2e2; color:var(--danger);">댓글 삭제</button>
+                                <button class="btn-back" onclick="cancelReport(${r.id})" style="font-size:0.7rem; padding: 2px 6px; background:#f1f5f9; color:#475569;">신고 취소</button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    targetAuthor = "박병목";
+                    descHtml = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding-bottom: 4px; margin-bottom: 4px;">
+                            <div>💬 [댓글] ID: ${r.target_id} (신고한 사람: ${r.reporter})</div>
+                            <button class="btn-back" onclick="cancelReport(${r.id})" style="font-size:0.7rem; padding: 2px 6px; background:#f1f5f9; color:#475569;">신고 취소</button>
+                        </div>
+                    `;
+                }
+            }
+
+            if (targetAuthor !== "알 수 없음") {
+                if (!userReportDetails[targetAuthor]) userReportDetails[targetAuthor] = [];
+                userReportDetails[targetAuthor].push(descHtml);
+                userReportCounts[targetAuthor] = (userReportCounts[targetAuthor] || 0) + 1;
+            }
+        });
+    }
+
+    let memberLikesSummary = "";
+    members.forEach(m => {
+        let totalLikes = getUploaderTotalLikes(m);
+        memberLikesSummary += `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
+                <span style="font-weight: 700; font-size: 0.9rem;">👤 ${m} (현재 총 좋아요: ${totalLikes}개)</span>
+                <button class="btn-back" onclick="adminEditLikes('${m}')" style="font-size:0.8rem; padding: 4px 10px;">좋아요 수정</button>
+            </div>
+        `;
+    });
+
+    let memberReportsSummary = "";
+    members.forEach(m => {
+        let totalReports = userReportCounts[m] || 0;
+        let details = userReportDetails[m] || [];
+        memberReportsSummary += `
+            <div style="display: flex; flex-direction: column; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; gap: 6px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 700; font-size: 0.9rem; color: var(--danger);">🚨 ${m} (누적 신고 횟수: ${totalReports}회)</span>
+                    ${totalReports > 0 ? `<button class="btn-back" onclick="toggleReportDetail('${m}')" style="font-size:0.75rem; padding: 3px 8px; background:#fecaca; color:#991b1b;">신고 상세 보기</button>` : ''}
+                </div>
+                <div id="reportDetail_${m}" style="display: none; background: #fff; border: 1px solid #fecaca; border-radius: 6px; padding: 10px; font-size: 0.85rem; color: var(--text-main); flex-direction: column; gap: 6px; margin-top: 4px;">
+                    ${details.length > 0 ? details.join('') : '<div style="color:var(--text-muted);">신고 내역이 없습니다.</div>'}
+                </div>
+            </div>
+        `;
+    });
 
     let listHtml = "";
-    if (error || !data || data.length === 0) {
+    if (!inquiriesData || inquiriesData.length === 0) {
         listHtml = `<p class="empty-msg">접수된 제안이나 문의가 없습니다.</p>`;
     } else {
-        data.forEach(item => {
+        inquiriesData.forEach(item => {
             let typeBadge = item.type === 'feature' ? '<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:700;">기능제안</span>' : '<span style="background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:700;">문의하기</span>';
             listHtml += `
                 <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
@@ -472,38 +585,156 @@ async function renderAdminView(contentArea) {
     }
 
     contentArea.innerHTML = `
-        <div class="card">
+        <div class="card" style="margin-bottom: 20px;">
             <div class="card-title">
-                <span>👑 관리자 페이지 (제안 & 문의)</span>
+                <span>👑 관리자 페이지</span>
                 <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
             </div>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">박병목 관리자만 볼 수 있는 접수 내역입니다.</p>
-            <div style="display: flex; flex-direction: column; max-height: 500px; overflow-y: auto;">
+            
+            <h3 style="font-size: 1rem; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">🏆 사용자별 좋아요 수 관리</h3>
+            <div style="display: flex; flex-direction: column; margin-bottom: 20px;">
+                ${memberLikesSummary}
+            </div>
+
+            <h3 style="font-size: 1rem; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">🚨 사용자별 신고 횟수 현황</h3>
+            <div style="display: flex; flex-direction: column; margin-bottom: 20px;">
+                ${memberReportsSummary}
+            </div>
+
+            <h3 style="font-size: 1rem; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">💡 기능제안 및 문의 접수 내역</h3>
+            <div style="display: flex; flex-direction: column; max-height: 350px; overflow-y: auto;">
                 ${listHtml}
             </div>
         </div>
     `;
 }
 
+async function cancelReport(reportId) {
+    if (!confirm("이 신고 내역을 취소하시겠습니까?")) return;
+    
+    const { error } = await supabaseClient.from('reports').delete().eq('id', Number(reportId));
+    if (error) {
+        alert("신고 취소 실패: " + error.message);
+        return;
+    }
+    
+    alert("신고가 취소되었습니다.");
+    await renderAdminView(document.getElementById("contentArea"));
+}
+
+async function adminDeletePhoto(id, imageUrl) {
+    if (!confirm("관리자 권한으로 이 사진을 정말 삭제하시겠습니까?")) return;
+    const fileName = imageUrl.split('/').pop();
+    await supabaseClient.storage.from('yubsa-bucket').remove([fileName]);
+    await supabaseClient.from('comments').delete().eq('photo_id', id);
+    await supabaseClient.from('reports').delete().eq('target_type', 'photo').eq('target_id', id);
+    await supabaseClient.from('photos').delete().eq('id', id);
+    alert("사진이 삭제되었습니다.");
+    await fetchPhotos();
+    renderAdminView(document.getElementById("contentArea"));
+}
+
+async function adminDeleteComment(commentId) {
+    if (!confirm("관리자 권한으로 이 댓글을 정말 삭제하시겠습니까?")) return;
+    await supabaseClient.from('replies').delete().eq('comment_id', commentId);
+    await supabaseClient.from('reports').delete().eq('target_type', 'comment').eq('target_id', commentId);
+    await supabaseClient.from('comments').delete().eq('id', commentId);
+    alert("댓글이 삭제되었습니다.");
+    await fetchComments();
+    await fetchReplies();
+    renderAdminView(document.getElementById("contentArea"));
+}
+
+function toggleReportDetail(memberName) {
+    const el = document.getElementById(`reportDetail_${memberName}`);
+    if (el) {
+        if (el.style.display === 'flex') {
+            el.style.display = 'none';
+        } else {
+            el.style.display = 'flex';
+        }
+    }
+}
+
+async function adminEditLikes(targetUser) {
+    let currentTotal = getUploaderTotalLikes(targetUser);
+    let input = prompt(`[${targetUser}]님의 현재 받은 총 좋아요 수는 ${currentTotal}개입니다.\n변경할 총 좋아요 수를 숫자로 입력하세요:`, currentTotal);
+    if (input === null) return;
+    let newTargetLikes = parseInt(input, 10);
+    if (isNaN(newTargetLikes) || newTargetLikes < 0) {
+        alert("올바른 숫자를 입력해주세요!");
+        return;
+    }
+
+    let userPhotos = photos.filter(p => p.uploader && p.uploader.toLowerCase() === targetUser.toLowerCase());
+    if (userPhotos.length === 0) {
+        alert("해당 유저가 올린 사진이 없어 좋아요를 수정할 수 없습니다.");
+        return;
+    }
+
+    let targetPhoto = userPhotos[0];
+    let diff = newTargetLikes - currentTotal;
+    let adjustedLikes = Math.max(0, (targetPhoto.likes || 0) + diff);
+
+    const { error } = await supabaseClient.from('photos').update({ likes: adjustedLikes }).eq('id', targetPhoto.id);
+    if (error) {
+        alert("수정 실패: " + error.message);
+        return;
+    }
+    alert(`[${targetUser}]님의 좋아요가 성공적으로 수정되었습니다!`);
+    fetchPhotos();
+}
+
 function renderMyProfileView(contentArea) {
     const profileName = currentUser;
     const myUploadedPhotos = photos.filter(p => p.uploader && p.uploader.toLowerCase() === profileName.toLowerCase());
     const uploadedLikes = getUploaderTotalLikes(profileName);
-    const tier = getTierInfo(uploadedLikes);
+    const userCommentsCount = getUserTotalComments(profileName);
 
-    let progressPercent = 100;
-    let remainingLikes = 0;
-    if (tier.name === 'Challenger') {
-        progressPercent = 100;
-        remainingLikes = 0;
-    } else if (tier.name === 'Iron') {
-        progressPercent = uploadedLikes > 0 ? 100 : 0;
-        remainingLikes = Math.max(0, 1 - uploadedLikes);
+    const combinedTier = getCombinedTier(uploadedLikes, userCommentsCount);
+
+    let likeCalcTier = getTierInfo(uploadedLikes);
+    let commentCalcTier = getTierInfo(userCommentsCount);
+
+    if (tierRanks[likeCalcTier.name] > tierRanks[combinedTier.name]) {
+        likeCalcTier = combinedTier;
+    }
+    if (tierRanks[commentCalcTier.name] > tierRanks[combinedTier.name]) {
+        commentCalcTier = combinedTier;
+    }
+
+    let likeProgressPercent = 100;
+    let likeMsg = "";
+    let currentTierMax = likeCalcTier.max;
+    if (uploadedLikes >= currentTierMax && likeCalcTier.name !== 'Challenger') {
+        likeProgressPercent = 100;
+        likeMsg = `<span style="color: ${likeCalcTier.hex}; font-weight: 700;">조건을 충족했습니다!</span>`;
+    } else if (likeCalcTier.name === 'Challenger' || uploadedLikes >= 61) {
+        likeProgressPercent = 100;
+        likeMsg = `<span style="color: ${likeCalcTier.hex}; font-weight: 700;">조건을 충족했습니다!</span>`;
     } else {
-        let rangeSpan = (tier.max - tier.min) + 1;
-        let currentProgressInTier = (uploadedLikes - tier.min) + 1;
-        progressPercent = Math.min(100, Math.max(0, (currentProgressInTier / rangeSpan) * 100));
-        remainingLikes = Math.max(0, tier.max - uploadedLikes);
+        let rangeSpan = (likeCalcTier.max - likeCalcTier.min) + 1;
+        let currentProgress = (uploadedLikes - likeCalcTier.min) + 1;
+        likeProgressPercent = Math.min(100, Math.max(0, (currentProgress / rangeSpan) * 100));
+        let remaining = likeCalcTier.max - uploadedLikes;
+        likeMsg = `다음 단계까지 남은 좋아요: <b>${remaining}개</b>`;
+    }
+
+    let commentProgressPercent = 100;
+    let commentMsg = "";
+    let commentTierMax = commentCalcTier.max;
+    if (userCommentsCount >= commentTierMax && commentCalcTier.name !== 'Challenger') {
+        commentProgressPercent = 100;
+        commentMsg = `<span style="color: ${commentCalcTier.hex}; font-weight: 700;">조건을 충족했습니다!</span>`;
+    } else if (commentCalcTier.name === 'Challenger' || userCommentsCount >= 61) {
+        commentProgressPercent = 100;
+        commentMsg = `<span style="color: ${commentCalcTier.hex}; font-weight: 700;">조건을 충족했습니다!</span>`;
+    } else {
+        let rangeSpan = (commentCalcTier.max - commentCalcTier.min) + 1;
+        let currentProgress = (userCommentsCount - commentCalcTier.min) + 1;
+        commentProgressPercent = Math.min(100, Math.max(0, (currentProgress / rangeSpan) * 100));
+        let remaining = commentCalcTier.max - userCommentsCount;
+        commentMsg = `다음 단계까지 남은 댓글: <b>${remaining}개</b>`;
     }
 
     contentArea.innerHTML = `
@@ -517,23 +748,35 @@ function renderMyProfileView(contentArea) {
                 <div class="profile-avatar">${profileName.charAt(0)}</div>
                 <div class="profile-info">
                     <div class="profile-username">👤 ${profileName}</div>
-                    <div class="profile-tier-row">
-                        <span class="profile-tier ${tier.class}">🏆 ${tier.name}</span>
-                    </div>
                     
-                    <div class="tier-progress-container">
-                        <div class="tier-progress-info">
-                            <span>${tier.name === 'Challenger' ? '최고 등급 달성!' : `다음 티어까지 남은 좋아요`}</span>
-                            <span><b>${remainingLikes}개</b></span>
+                    <div style="margin: 8px 0; font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
+                        ⭐ 티어: <span class="profile-tier ${combinedTier.class}">${combinedTier.name}</span>
+                    </div>
+
+                    <div style="margin-top: 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 0.85rem; font-weight: 600;">❤️ 좋아요 조건</span>
+                            <span style="font-size: 0.80rem; color: var(--text-muted);">${likeMsg}</span>
                         </div>
-                        <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" style="width: ${progressPercent}%; background-color: ${tier.hex};"></div>
+                        <div class="progress-bar-bg" style="height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                            <div class="progress-bar-fill" style="width: ${likeProgressPercent}%; height: 100%; background-color: ${likeCalcTier.hex}; transition: width 0.4s ease;"></div>
                         </div>
                     </div>
 
-                    <div class="profile-stats">
+                    <div style="margin-top: 12px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-size: 0.85rem; font-weight: 600;">💬 댓글 조건</span>
+                            <span style="font-size: 0.80rem; color: var(--text-muted);">${commentMsg}</span>
+                        </div>
+                        <div class="progress-bar-bg" style="height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                            <div class="progress-bar-fill" style="width: ${commentProgressPercent}%; height: 100%; background-color: ${commentCalcTier.hex}; transition: width 0.4s ease;"></div>
+                        </div>
+                    </div>
+
+                    <div class="profile-stats" style="margin-top: 14px;">
                         <span>게시물 <b>${myUploadedPhotos.length}개</b></span>
                         <span>받은 좋아요 <b>${uploadedLikes}개</b></span>
+                        <span>작성 댓글 <b>${userCommentsCount}개</b></span>
                     </div>
                 </div>
             </div>
@@ -563,7 +806,9 @@ function renderTargetProfileView(contentArea) {
     const targetPhotos = photos.filter(p => photoHasTarget(p.target, profileName));
     const totalLikes = targetPhotos.reduce((sum, p) => sum + (p.likes || 0), 0);
     const uploadedLikes = getUploaderTotalLikes(profileName);
-    const tier = getTierInfo(uploadedLikes);
+    const userCommentsCount = getUserTotalComments(profileName);
+
+    const combinedTier = getCombinedTier(uploadedLikes, userCommentsCount);
 
     contentArea.innerHTML = `
         <div class="card">
@@ -576,12 +821,13 @@ function renderTargetProfileView(contentArea) {
                 <div class="profile-avatar">${profileName.charAt(0)}</div>
                 <div class="profile-info">
                     <div class="profile-username">🎯 ${profileName}</div>
-                    <div class="profile-tier-row">
-                        <span class="profile-tier ${tier.class}">🏆 ${tier.name}</span>
+                    <div style="margin-top: 6px;">
+                        <span class="profile-tier ${combinedTier.class}">⭐ 티어: ${combinedTier.name}</span>
                     </div>
-                    <div class="profile-stats">
-                        <span>주인공으로 태그된 사진 <b>${targetPhotos.length}개</b></span>
-                        <span>태그된 피드 총 좋아요 <b>${totalLikes}개</b></span>
+                    <div class="profile-stats" style="margin-top: 10px;">
+                        <span>태그된 사진 <b>${targetPhotos.length}개</b></span>
+                        <span>총 좋아요 <b>${totalLikes}개</b></span>
+                        <span>작성 댓글 <b>${userCommentsCount}개</b></span>
                     </div>
                 </div>
             </div>
@@ -610,7 +856,8 @@ function renderFriendsView(contentArea) {
     let membersListHtml = "";
     members.forEach(m => {
         let uploadedLikes = getUploaderTotalLikes(m);
-        let tier = getTierInfo(uploadedLikes);
+        let userCommentsCount = getUserTotalComments(m);
+        let tier = getCombinedTier(uploadedLikes, userCommentsCount);
         membersListHtml += `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px;">
                 <span style="font-weight: 700;">🎯 ${m}</span>
@@ -1053,12 +1300,56 @@ async function fetchReplies() {
     }
 }
 
+async function reportPhoto(photoId) {
+    const { data: existing } = await supabaseClient
+        .from('reports')
+        .select('id')
+        .eq('target_type', 'photo')
+        .eq('target_id', Number(photoId))
+        .eq('reporter', currentUser)
+        .maybeSingle();
+
+    if (existing) {
+        alert("이미 이 사진을 신고하셨습니다.");
+        return;
+    }
+
+    if (!confirm("이 사진을 신고하시겠습니까?")) return;
+    const { error } = await supabaseClient.from('reports').insert([
+        { target_type: 'photo', target_id: Number(photoId), reporter: currentUser }
+    ]);
+    if (error) { alert("신고 실패: " + error.message); return; }
+    alert("사진이 신고되었습니다.");
+}
+
+async function reportComment(commentId) {
+    const { data: existing } = await supabaseClient
+        .from('reports')
+        .select('id')
+        .eq('target_type', 'comment')
+        .eq('target_id', Number(commentId))
+        .eq('reporter', currentUser)
+        .maybeSingle();
+
+    if (existing) {
+        alert("이미 이 댓글을 신고하셨습니다.");
+        return;
+    }
+
+    if (!confirm("이 댓글을 신고하시겠습니까?")) return;
+    const { error } = await supabaseClient.from('reports').insert([
+        { target_type: 'comment', target_id: Number(commentId), reporter: currentUser }
+    ]);
+    if (error) { alert("신고 실패: " + error.message); return; }
+    alert("댓글이 신고되었습니다.");
+}
+
 async function addComment(photoId) {
     const input = document.getElementById(`commentInput_${photoId}`);
     const content = input.value.trim();
     if (!content) return;
 
-    const { error } = await supabaseClient.from('comments').insert([{ photo_id: photoId, author: currentUser, content: content, likes: 0, liked_users: [] }]);
+    const { error } = await supabaseClient.from('comments').insert([{ photo_id: Number(photoId), author: currentUser, content: content, likes: 0, liked_users: [] }]);
     if (error) { alert("댓글 작성 실패: " + error.message); return; }
     input.value = "";
     await fetchComments();
@@ -1099,7 +1390,7 @@ async function addReply(commentId) {
     const content = input.value.trim();
     if (!content) return;
 
-    const { error } = await supabaseClient.from('replies').insert([{ comment_id: commentId, author: currentUser, content: content }]);
+    const { error } = await supabaseClient.from('replies').insert([{ comment_id: Number(commentId), author: currentUser, content: content }]);
     if (error) { alert("답글 작성 실패: " + error.message); return; }
     activeReplyCommentId = null;
     await fetchReplies();
@@ -1109,6 +1400,7 @@ async function addReply(commentId) {
 async function deleteComment(commentId) {
     if (confirm("댓글을 삭제하시겠습니까?")) {
         await supabaseClient.from('replies').delete().eq('comment_id', commentId);
+        await supabaseClient.from('reports').delete().eq('target_type', 'comment').eq('target_id', commentId);
         await supabaseClient.from('comments').delete().eq('id', commentId);
         await fetchComments();
         await fetchReplies();
@@ -1226,8 +1518,9 @@ function renderGalleryList() {
             let cHeartIcon = cHasLiked ? '❤️' : '🤍';
             let cLikesCount = c.likes || 0;
 
-            let authorUploadedLikes = getUploaderTotalLikes(c.author);
-            let authorTier = getTierInfo(authorUploadedLikes);
+            let authorLikes = getUploaderTotalLikes(c.author);
+            let authorComments = getUserTotalComments(c.author);
+            let authorTier = getCombinedTier(authorLikes, authorComments);
 
             let commentReplies = repliesMap[c.id] || [];
             let repliesHtml = "";
@@ -1256,6 +1549,7 @@ function renderGalleryList() {
                                 ${cHeartIcon} ${cLikesCount}
                             </span>
                             <span style="cursor:pointer; color:var(--accent);" onclick="toggleReplyForm(${c.id})">답글</span>
+                            <span style="cursor:pointer; color:#d97706;" onclick="reportComment(${c.id})" title="댓글 신고">🚨 신고</span>
                             ${canModifyComment ? `<span style="cursor:pointer; color:var(--danger);" onclick="deleteComment(${c.id})">삭제</span>` : ''}
                         </div>
                     </div>
@@ -1289,12 +1583,13 @@ function renderGalleryList() {
                         </div>
                     </div>
                     
-                    ${canDelete ? `
                     <div class="action-buttons">
+                        <button class="action-btn btn-report" onclick="reportPhoto(${photo.id})">🚨 신고</button>
+                        ${canDelete ? `
                         <button class="action-btn btn-delete" onclick="deletePhoto(${photo.id}, '${photo.url}')">
                             🗑️ 삭제
-                        </button>
-                    </div>` : ''}
+                        </button>` : ''}
+                    </div>
 
                     <div class="comments-section">
                         <div class="comments-list">
@@ -1337,7 +1632,7 @@ async function toggleLikeDirect(id) {
     const photo = photos.find(p => p.id === id);
     if (!photo) return;
 
-    let likedUsers = Array.isArray(photo.liked_users) ? [...photo.liked_users] : [];
+    let likedUsers = Array.isArray(photo.liked_users) ? photo.liked_users : [];
     let newLikes = photo.likes || 0;
 
     if (likedUsers.includes(currentUser)) {
@@ -1357,6 +1652,7 @@ async function deletePhoto(id, imageUrl) {
         const fileName = imageUrl.split('/').pop();
         await supabaseClient.storage.from('yubsa-bucket').remove([fileName]);
         await supabaseClient.from('comments').delete().eq('photo_id', id);
+        await supabaseClient.from('reports').delete().eq('target_type', 'photo').eq('target_id', id);
         await supabaseClient.from('photos').delete().eq('id', id);
         fetchPhotos();
     }
