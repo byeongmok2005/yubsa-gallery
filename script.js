@@ -9,6 +9,7 @@ let photos = [];
 let commentsMap = {}; 
 let repliesMap = {};
 let members = [];
+let userProfiles = {};
 let isSignUpMode = false;
 let currentView = 'home';
 let selectedProfile = null;
@@ -20,6 +21,13 @@ let dmMessages = [];
 let myRooms = [];
 let isCreatingRoom = false;
 let unreadNotifications = [];
+
+// 여행 앨범 관련 상태
+let travelRooms = [];
+let activeTravelRoomId = null;
+let activeTravelRoomTitle = "";
+let travelPhotos = [];
+let isCreatingTravelRoom = false;
 
 async function initApp() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -33,6 +41,7 @@ async function initApp() {
     }
 
     await fetchMembers();
+    await fetchUserProfiles();
     renderAuthArea();
     renderSidebarMenu();
     if (!currentUser) {
@@ -40,6 +49,7 @@ async function initApp() {
     } else {
         renderMainContent();
         fetchPhotos();
+        fetchTravelRooms();
         setupRealtimeSubscriptions();
     }
 }
@@ -55,9 +65,11 @@ function renderSidebarMenu() {
 
     menuList.innerHTML = `
         <li class="sidebar-menu-item" onclick="navigateTo('home')">🏠 홈 / 갤러리</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('travel')">✈️ 여행 앨범</li>
         <li class="sidebar-menu-item" onclick="navigateTo('myProfile')">👤 내 프로필</li>
         <li class="sidebar-menu-item" onclick="navigateTo('friends')">👥 친구 관리</li>
         <li class="sidebar-menu-item" onclick="navigateTo('dm')">💬 DM</li>
+        <li class="sidebar-menu-item" onclick="navigateTo('fishing')">🎣 심해 낚시터</li>
         <li class="sidebar-menu-item" onclick="navigateTo('featureRequest')">💡 기능 제안</li>
         <li class="sidebar-menu-item" onclick="navigateTo('inquiry')">📞 문의 하기</li>
         ${adminMenuHtml}
@@ -80,6 +92,14 @@ function setupRealtimeSubscriptions() {
             }
             fetchComments();
             renderGalleryList();
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'travel_photos' }, payload => {
+            if (payload.new && payload.new.uploader !== currentUser) {
+                addNotification(`✈️ 여행 앨범에 새로운 사진이 올라왔습니다!`);
+            }
+            if (activeTravelRoomId && Number(payload.new.room_id) === Number(activeTravelRoomId)) {
+                fetchTravelPhotos(activeTravelRoomId);
+            }
         })
         .subscribe();
 }
@@ -169,6 +189,13 @@ function navigateTo(view) {
         activeRoomId = null;
         isCreatingRoom = false;
         fetchMyRooms();
+    } else if (view === 'travel') {
+        activeTravelRoomId = null;
+        isCreatingTravelRoom = false;
+        fetchTravelRooms();
+    } else if (view === 'fishing') {
+    initFishing().then(() => renderFishingView(document.getElementById("contentArea")));
+    return;
     }
     renderMainContent();
 }
@@ -220,6 +247,69 @@ async function fetchMembers() {
     members = Array.from(set);
 }
 
+async function fetchUserProfiles() {
+    const { data } = await supabaseClient.from('users').select('nickname, profile_img');
+    if (data) {
+        userProfiles = {};
+        data.forEach(u => {
+            if (u.nickname) {
+                userProfiles[u.nickname] = u.profile_img || "";
+            }
+        });
+    }
+}
+
+function getUserAvatarHtml(userName, size = '48px') {
+    let imgUrl = userProfiles[userName];
+    if (imgUrl) {
+        return `<div style="width: ${size}; height: ${size}; border-radius: 50%; overflow: hidden; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="프로필"></div>`;
+    } else {
+        return `
+            <div style="width: ${size}; height: ${size}; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #64748b;">
+                <svg width="${parseInt(size)*0.6}" height="${parseInt(size)*0.6}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+            </div>
+        `;
+    }
+}
+
+async function updateProfileImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const fileExt = file.name.split('.').pop();
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+    const fileName = `profile_${fileHash}_${Date.now()}.${fileExt}`;
+
+    const { error: storageError } = await supabaseClient.storage.from('yubsa-bucket').upload(fileName, file);
+    if (storageError) {
+        alert("프로필 사진 업로드 실패: " + storageError.message);
+        return;
+    }
+
+    const { data: publicUrlData } = supabaseClient.storage.from('yubsa-bucket').getPublicUrl(fileName);
+    const imageUrl = publicUrlData.publicUrl;
+
+    const { error: dbError } = await supabaseClient
+        .from('users')
+        .update({ profile_img: imageUrl })
+        .eq('nickname', currentUser);
+
+    if (dbError) {
+        alert("프로필 저장 실패: " + dbError.message);
+        return;
+    }
+
+    userProfiles[currentUser] = imageUrl;
+    alert("프로필 사진이 변경되었습니다!");
+    renderMainContent();
+}
+
 function getUploaderTotalLikes(userName) {
     let total = 0;
     photos.forEach(p => {
@@ -235,6 +325,12 @@ function getUserTotalComments(userName) {
     const allComments = Object.values(commentsMap).flat();
     allComments.forEach(c => {
         if (c.author && c.author.toLowerCase() === userName.toLowerCase()) {
+            total += 1;
+        }
+    });
+    const allReplies = Object.values(repliesMap).flat();
+    allReplies.forEach(r => {
+        if (r.author && r.author.toLowerCase() === userName.toLowerCase()) {
             total += 1;
         }
     });
@@ -282,29 +378,29 @@ function renderAuthArea() {
 function renderAuthScreen() {
     const contentArea = document.getElementById("contentArea");
     contentArea.innerHTML = `
-        <div class="card">
-            <h2 class="card-title">${isSignUpMode ? '회원가입' : '로그인'}</h2>
+        <div class="card" style="box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05); border: 1px solid #f1f5f9; border-radius: 16px;">
+            <h2 class="card-title" style="font-size: 1.25rem; font-weight: 700; color: #1e293b; letter-spacing: -0.025em; margin-bottom: 20px;">${isSignUpMode ? '✨ 회원가입' : '👋 로그인'}</h2>
             ${isSignUpMode ? `
-            <div class="form-group">
-                <label>사용할 닉네임</label>
-                <input type="text" id="authNickname" placeholder="예: 홍길동">
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 6px; display: block;">이름</label>
+                <input type="text" id="authNickname" placeholder="예: 홍길동" style="padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; transition: all 0.2s;">
             </div>
-            <div class="form-group">
-                <label>초대 코드</label>
-                <input type="password" id="inviteCode" placeholder="관리자에게 받은 코드 입력">
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 6px; display: block;">초대 코드</label>
+                <input type="password" id="inviteCode" placeholder="관리자에게 받은 코드 입력" style="padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem;">
             </div>` : ''}
-            <div class="form-group">
-                <label>아이디 (이메일 형태)</label>
-                <input type="text" id="authEmail" placeholder="id@friend.com">
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 6px; display: block;">아이디 (이메일 형태)</label>
+                <input type="text" id="authEmail" placeholder="id@friend.com" style="padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem;">
             </div>
-            <div class="form-group">
-                <label>비밀번호</label>
-                <input type="password" id="authPassword" placeholder="비밀번호 입력">
+            <div class="form-group" style="margin-bottom: 24px;">
+                <label style="font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 6px; display: block;">비밀번호</label>
+                <input type="password" id="authPassword" placeholder="비밀번호 입력" style="padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem;">
             </div>
-            <button class="btn-primary" onclick="handleAuth()">${isSignUpMode ? '가입하기' : '로그인하기'}</button>
+            <button class="btn-primary" onclick="handleAuth()" style="width: 100%; padding: 14px; border-radius: 10px; font-weight: 600; font-size: 1rem; background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: none; color: #fff; cursor: pointer; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); transition: transform 0.1s;">${isSignUpMode ? '가입 완료하기' : '로그인하기'}</button>
             
-            <div class="auth-toggle-text">
-                ${isSignUpMode ? '이미 계정이 있으신가요? <span onclick="toggleAuthMode()">로그인하기</span>' : '계정이 없으신가요? <span onclick="toggleAuthMode()">회원가입하기</span>'}
+            <div class="auth-toggle-text" style="text-align: center; margin-top: 20px; font-size: 0.9rem; color: #64748b;">
+                ${isSignUpMode ? '이미 계정이 있으신가요? <span onclick="toggleAuthMode()" style="color: #2563eb; font-weight: 600; cursor: pointer; text-decoration: underline; margin-left: 4px;">로그인하기</span>' : '아직 계정이 없으신가요? <span onclick="toggleAuthMode()" style="color: #2563eb; font-weight: 600; cursor: pointer; text-decoration: underline; margin-left: 4px;">회원가입하기</span>'}
             </div>
         </div>
     `;
@@ -326,7 +422,7 @@ async function handleAuth() {
         const code = document.getElementById("inviteCode").value.trim();
 
         let cleanN = cleanName(nickname);
-        if (!cleanN) { alert("올바른 닉네임을 입력해주세요!"); return; }
+        if (!cleanN) { alert("올바른 이름을 입력해주세요!"); return; }
         if (code !== INVITE_CODE) { alert("초대 코드가 올바르지 않습니다!"); return; }
 
         const { data, error } = await supabaseClient.auth.signUp({
@@ -348,6 +444,7 @@ async function handleAuth() {
     }
 
     localStorage.setItem('yubsa_user', currentUser);
+    await fetchUserProfiles();
     initApp();
 }
 
@@ -384,6 +481,9 @@ function renderMainContent() {
         return;
     } else if (currentView === 'dm') {
         renderDmView(contentArea);
+        return;
+    } else if (currentView === 'travel') {
+        renderTravelView(contentArea);
         return;
     } else if (currentView === 'admin') {
         renderAdminView(contentArea);
@@ -460,6 +560,202 @@ function renderMainContent() {
     renderGalleryList();
     updateNotifBadge();
 }
+
+// ================= 여행 사진룸 관련 로직 =================
+async function fetchTravelRooms() {
+    const { data, error } = await supabaseClient.from('travel_rooms').select('*').order('created_at', { ascending: false });
+    if (!error && data) {
+        travelRooms = data;
+    }
+    if (currentView === 'travel' && !activeTravelRoomId && !isCreatingTravelRoom) {
+        renderTravelView(document.getElementById("contentArea"));
+    }
+}
+
+async function fetchTravelPhotos(roomId) {
+    const { data, error } = await supabaseClient.from('travel_photos').select('*').eq('room_id', roomId).order('created_at', { ascending: false });
+    if (!error && data) {
+        travelPhotos = data;
+    }
+    if (currentView === 'travel' && activeTravelRoomId) {
+        renderTravelView(document.getElementById("contentArea"));
+    }
+}
+
+function renderTravelView(contentArea) {
+    if (activeTravelRoomId) {
+        let photosHtml = "";
+        travelPhotos.forEach(p => {
+            let canDelete = (p.uploader === currentUser);
+            photosHtml += `
+                <div style="background: #fff; border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <div style="width: 100%; aspect-ratio: 1/1; overflow: hidden; background: #f1f5f9;">
+                        <img src="${p.url}" style="width: 100%; height: 100%; object-fit: cover;" alt="여행 사진">
+                    </div>
+                    <div style="padding: 10px; display: flex; flex-direction: column; gap: 4px;">
+                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">📸 ${p.caption || '제목 없음'}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
+                            <span>올린이: <b>${p.uploader}</b></span>
+                            ${canDelete ? `<button onclick="deleteTravelPhoto(${p.id}, '${p.url}')" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:600;">삭제</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        contentArea.innerHTML = `
+            <div class="card">
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">✈️ ${activeTravelRoomTitle}</span>
+                    <button class="btn-back" onclick="activeTravelRoomId = null; navigateTo('travel');">목록으로</button>
+                </div>
+
+                <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 20px;">
+                    <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 10px;">✨ 이 여행방에 사진 올리기</h3>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <input type="text" id="travelPhotoCaption" placeholder="사진 설명 또는 제목 (예: 첫째 날 맛집 앞에서)" style="padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <input type="file" id="travelPhotoFile" accept="image/*">
+                    </div>
+                    <button class="btn-primary" onclick="uploadTravelPhoto()" style="margin-top: 0; padding: 10px;">사진 업로드</button>
+                </div>
+
+                <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">🖼️ 여행 사진 갤러리</h3>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                    ${photosHtml || '<p class="empty-msg" style="grid-column: span 2;">아직 업로드된 사진이 없습니다. 첫 사진을 올려보세요!</p>'}
+                </div>
+            </div>
+        `;
+    } else if (isCreatingTravelRoom) {
+        contentArea.innerHTML = `
+            <div class="card">
+                <div class="card-title">
+                    <span>새로운 여행방 만들기</span>
+                    <button class="btn-back" onclick="isCreatingTravelRoom = false; renderMainContent();">취소</button>
+                </div>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">친구들과 함께 공유할 여행 앨범 이름을 입력해주세요.</p>
+                <div class="form-group">
+                    <label>여행방 이름</label>
+                    <input type="text" id="travelRoomTitleInput" placeholder="예: 2026 일본 오사카 여행 🇯🇵">
+                </div>
+                <button class="btn-primary" onclick="createTravelRoom()">방 만들기</button>
+            </div>
+        `;
+    } else {
+        let roomsHtml = "";
+        travelRooms.forEach(room => {
+            roomsHtml += `
+                <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="openTravelRoom(${room.id}, '${room.title}')">
+                    <div>
+                        <div style="font-weight: 700; font-size: 1.05rem; color: var(--text-main); margin-bottom: 4px;">✈️ ${room.title}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">만든 사람: <b>${room.creator}</b> | ${new Date(room.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <span style="color: var(--accent); font-weight: 700; font-size: 0.9rem;">입장 →</span>
+                </div>
+            `;
+        });
+
+        contentArea.innerHTML = `
+            <div class="card">
+                <div class="card-title">
+                    <span>✈️ 여행 사진 앨범</span>
+                    <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
+                </div>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px;">친구들과 다녀온 여행 사진을 모아두는 공간입니다. 자유롭게 방을 만들고 사진을 공유하세요!</p>
+                
+                <div style="display: flex; flex-direction: column; margin-bottom: 16px;">
+                    ${roomsHtml || '<p class="empty-msg">개설된 여행방이 없습니다. 첫 방을 만들어보세요!</p>'}
+                </div>
+
+                <button class="btn-primary" onclick="isCreatingTravelRoom = true; renderMainContent();">+ 새로운 여행방 만들기</button>
+            </div>
+        `;
+    }
+}
+
+async function createTravelRoom() {
+    const input = document.getElementById("travelRoomTitleInput");
+    const title = input ? input.value.trim() : "";
+    if (!title) {
+        alert("여행방 이름을 입력해주세요!");
+        return;
+    }
+
+    const { data, error } = await supabaseClient.from('travel_rooms').insert([
+        { title: title, creator: currentUser }
+    ]).select();
+
+    if (error) {
+        alert("여행방 생성 실패: " + error.message);
+        return;
+    }
+
+    alert("여행방이 생성되었습니다!");
+    isCreatingTravelRoom = false;
+    await fetchTravelRooms();
+    if (data && data.length > 0) {
+        openTravelRoom(data[0].id, data[0].title);
+    }
+}
+
+async function openTravelRoom(roomId, roomTitle) {
+    activeTravelRoomId = roomId;
+    activeTravelRoomTitle = roomTitle;
+    await fetchTravelPhotos(roomId);
+}
+
+async function uploadTravelPhoto() {
+    const captionInput = document.getElementById("travelPhotoCaption");
+    const fileInput = document.getElementById("travelPhotoFile");
+    const caption = captionInput ? captionInput.value.trim() : "";
+
+    if (!fileInput || fileInput.files.length === 0) {
+        alert("업로드할 사진을 선택해주세요!");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const fileExt = file.name.split('.').pop();
+    const buffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
+    const fileName = `travel_${fileHash}_${Date.now()}.${fileExt}`;
+
+    const { error: storageError } = await supabaseClient.storage.from('yubsa-bucket').upload(fileName, file);
+    if (storageError) {
+        alert("사진 업로드 실패: " + storageError.message);
+        return;
+    }
+
+    const { data: publicUrlData } = supabaseClient.storage.from('yubsa-bucket').getPublicUrl(fileName);
+    const imageUrl = publicUrlData.publicUrl;
+
+    const { error: dbError } = await supabaseClient.from('travel_photos').insert([
+        { room_id: activeTravelRoomId, url: imageUrl, uploader: currentUser, caption: caption }
+    ]);
+
+    if (dbError) {
+        alert("저장 실패: " + dbError.message);
+        return;
+    }
+
+    if (captionInput) captionInput.value = "";
+    fileInput.value = "";
+    alert("여행 사진이 업로드되었습니다!");
+    await fetchTravelPhotos(activeTravelRoomId);
+}
+
+async function deleteTravelPhoto(photoId, imageUrl) {
+    if (!confirm("이 사진을 삭제하시겠습니까?")) return;
+    const fileName = imageUrl.split('/').pop();
+    await supabaseClient.storage.from('yubsa-bucket').remove([fileName]);
+    await supabaseClient.from('travel_photos').delete().eq('id', photoId);
+    alert("사진이 삭제되었습니다.");
+    await fetchTravelPhotos(activeTravelRoomId);
+}
+// ========================================================
 
 async function renderAdminView(contentArea) {
     if (currentUser !== '박병목') {
@@ -734,7 +1030,7 @@ function renderMyProfileView(contentArea) {
         let currentProgress = (userCommentsCount - commentCalcTier.min) + 1;
         commentProgressPercent = Math.min(100, Math.max(0, (currentProgress / rangeSpan) * 100));
         let remaining = commentCalcTier.max - userCommentsCount;
-        commentMsg = `다음 단계까지 남은 댓글: <b>${remaining}개</b>`;
+        commentMsg = `다음 단계까지 남은 댓글/답글: <b>${remaining}개</b>`;
     }
 
     contentArea.innerHTML = `
@@ -744,44 +1040,59 @@ function renderMyProfileView(contentArea) {
                 <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
             </div>
             
-            <div class="instagram-profile">
-                <div class="profile-avatar">${profileName.charAt(0)}</div>
-                <div class="profile-info">
-                    <div class="profile-username">👤 ${profileName}</div>
+            <div class="instagram-profile" style="display: flex; flex-direction: row; align-items: center; gap: 20px;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0;">
+                    ${getUserAvatarHtml(profileName, '80px')}
+                    <label style="font-size: 0.75rem; background: var(--accent); color: white; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                        사진 변경
+                        <input type="file" accept="image/*" style="display: none;" onchange="updateProfileImage(event)">
+                    </label>
+                </div>
+                <div class="profile-info" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="profile-username" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 4px;">👤 ${profileName}</div>
                     
-                    <div style="margin: 8px 0; font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
+                    <div style="margin: 4px 0 8px 0; font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
                         ⭐ 티어: <span class="profile-tier ${combinedTier.class}">${combinedTier.name}</span>
                     </div>
 
-                    <div style="margin-top: 10px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 0.85rem; font-weight: 600;">❤️ 좋아요 조건</span>
-                            <span style="font-size: 0.80rem; color: var(--text-muted);">${likeMsg}</span>
+                    <div style="margin-top: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                            <span style="font-size: 0.8rem; font-weight: 600;">❤️ 좋아요 조건</span>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">${likeMsg}</span>
                         </div>
-                        <div class="progress-bar-bg" style="height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                        <div class="progress-bar-bg" style="height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
                             <div class="progress-bar-fill" style="width: ${likeProgressPercent}%; height: 100%; background-color: ${likeCalcTier.hex}; transition: width 0.4s ease;"></div>
                         </div>
                     </div>
 
-                    <div style="margin-top: 12px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-size: 0.85rem; font-weight: 600;">💬 댓글 조건</span>
-                            <span style="font-size: 0.80rem; color: var(--text-muted);">${commentMsg}</span>
+                    <div style="margin-top: 8px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+                            <span style="font-size: 0.8rem; font-weight: 600;">💬 댓글/답글 조건</span>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">${commentMsg}</span>
                         </div>
-                        <div class="progress-bar-bg" style="height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden;">
+                        <div class="progress-bar-bg" style="height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
                             <div class="progress-bar-fill" style="width: ${commentProgressPercent}%; height: 100%; background-color: ${commentCalcTier.hex}; transition: width 0.4s ease;"></div>
                         </div>
-                    </div>
-
-                    <div class="profile-stats" style="margin-top: 14px;">
-                        <span>게시물 <b>${myUploadedPhotos.length}개</b></span>
-                        <span>받은 좋아요 <b>${uploadedLikes}개</b></span>
-                        <span>작성 댓글 <b>${userCommentsCount}개</b></span>
                     </div>
                 </div>
             </div>
 
-            <div class="instagram-grid" id="profileGrid"></div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <div style="flex: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">게시물</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--text-main); margin-top: 2px;">${myUploadedPhotos.length}</div>
+                </div>
+                <div style="flex: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">좋아요</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--text-main); margin-top: 2px;">${uploadedLikes}</div>
+                </div>
+                <div style="flex: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">댓글/답글</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--text-main); margin-top: 2px;">${userCommentsCount}</div>
+                </div>
+            </div>
+
+            <div class="instagram-grid" id="profileGrid" style="margin-top: 16px;"></div>
         </div>
     `;
 
@@ -817,22 +1128,34 @@ function renderTargetProfileView(contentArea) {
                 <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
             </div>
             
-            <div class="instagram-profile">
-                <div class="profile-avatar">${profileName.charAt(0)}</div>
-                <div class="profile-info">
-                    <div class="profile-username">🎯 ${profileName}</div>
-                    <div style="margin-top: 6px;">
+            <div class="instagram-profile" style="display: flex; flex-direction: row; align-items: center; gap: 20px;">
+                <div style="flex-shrink: 0;">
+                    ${getUserAvatarHtml(profileName, '80px')}
+                </div>
+                <div class="profile-info" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="profile-username" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 6px;">🎯 ${profileName}</div>
+                    <div style="margin-top: 4px;">
                         <span class="profile-tier ${combinedTier.class}">⭐ 티어: ${combinedTier.name}</span>
-                    </div>
-                    <div class="profile-stats" style="margin-top: 10px;">
-                        <span>태그된 사진 <b>${targetPhotos.length}개</b></span>
-                        <span>총 좋아요 <b>${totalLikes}개</b></span>
-                        <span>작성 댓글 <b>${userCommentsCount}개</b></span>
                     </div>
                 </div>
             </div>
 
-            <div class="instagram-grid" id="profileGrid"></div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <div style="flex: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">태그된 사진</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--text-main); margin-top: 2px;">${targetPhotos.length}</div>
+                </div>
+                <div style="flex: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">총 좋아요</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--text-main); margin-top: 2px;">${totalLikes}</div>
+                </div>
+                <div style="flex: 1; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">댓글/답글</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: var(--text-main); margin-top: 2px;">${userCommentsCount}</div>
+                </div>
+            </div>
+
+            <div class="instagram-grid" id="profileGrid" style="margin-top: 16px;"></div>
         </div>
     `;
 
@@ -859,8 +1182,11 @@ function renderFriendsView(contentArea) {
         let userCommentsCount = getUserTotalComments(m);
         let tier = getCombinedTier(uploadedLikes, userCommentsCount);
         membersListHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px;">
-                <span style="font-weight: 700;">🎯 ${m}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    ${getUserAvatarHtml(m, '36px')}
+                    <span style="font-weight: 700;">${m}</span>
+                </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span class="profile-tier ${tier.class}">${tier.name}</span>
                     <button class="btn-back" onclick="openTargetProfile('${m}')">프로필 보기</button>
@@ -1527,12 +1853,12 @@ function renderGalleryList() {
             commentReplies.forEach(r => {
                 let canDeleteReply = (r.author === currentUser);
                 repliesHtml += `
-                    <div class="reply-item">
+                    <div class="reply-item" style="margin-top: 6px; margin-left: 20px; padding: 8px 10px; background: #f1f5f9; border-radius: 6px; border-left: 3px solid var(--accent);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight:700; color:var(--text-main);">${r.author}</span>
+                            <span style="font-weight:700; color:var(--text-main);">ㄴ ${r.author}</span>
                             ${canDeleteReply ? `<span style="cursor:pointer; color:var(--danger); font-size:0.7rem;" onclick="deleteReply(${r.id})">삭제</span>` : ''}
                         </div>
-                        <div style="margin-top:2px;">${r.content}</div>
+                        <div style="margin-top:4px; font-size: 0.85rem;">${r.content}</div>
                     </div>
                 `;
             });
@@ -1558,7 +1884,7 @@ function renderGalleryList() {
                     ${repliesHtml}
 
                     ${activeReplyCommentId === c.id ? `
-                    <div class="comment-form" style="margin-top: 6px; margin-left: 16px;">
+                    <div class="comment-form" style="margin-top: 8px; margin-left: 20px;">
                         <input type="text" id="replyInput_${c.id}" class="comment-input" placeholder="답글을 남겨주세요...">
                         <button class="comment-submit-btn" onclick="addReply(${c.id})">등록</button>
                     </div>` : ''}
