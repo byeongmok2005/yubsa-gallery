@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (다곤 계약 및 양방향 안전 직거래 완성판)
+// fishing.js - 심해 낚시터 (다곤 계약 공유 및 직거래, UI 고정 완성판)
 
 let fishingData = { 
     money: 1000, 
@@ -95,6 +95,16 @@ const GRADE_PRIORITY = { '특수': 7, '영물': 6, '신화': 5, '전설': 4, '�
 
 async function initFishing() {
     if (!currentUser) return;
+
+    // 🔒 [테스트 단계] 허용된 관리자/테스터 계정 외 접근 차단
+    const allowedTesters = ['박병목', '실험체'];
+    if (!allowedTesters.includes(currentUser)) {
+        alert("⚠️ 현재 낚시 시스템은 시험 운영 중입니다. 허용된 계정만 접근할 수 있습니다!");
+        if (typeof navigateTo === 'function') {
+            navigateTo('home');
+        }
+        return;
+    }
 
     let fetchedPlayers = new Set();
 
@@ -445,67 +455,54 @@ async function executeTrade(senderPlayer, fishVal, moneyVal) {
         }
     }
 
+    const { data: senderRow } = await supabaseClient
+        .from('user_fishing_data')
+        .select('*')
+        .eq('nickname', senderPlayer)
+        .maybeSingle();
+
+    if (!senderRow) {
+        alert("상대방 데이터를 찾을 수 없습니다.");
+        return;
+    }
+
+    let senderInv = senderRow.fish_inventory || {};
+
     if (fishVal) {
         let [fName, fSzStr] = fishVal.split(':');
         let fSz = parseInt(fSzStr);
 
-        const { data: senderRow } = await supabaseClient
-            .from('user_fishing_data')
-            .select('*')
-            .eq('nickname', senderPlayer)
-            .maybeSingle();
+        if (senderInv[fName]) {
+            let idx = senderInv[fName].indexOf(fSz);
+            if (idx > -1) {
+                senderInv[fName].splice(idx, 1);
+                if (senderInv[fName].length === 0) delete senderInv[fName];
 
-        if (senderRow && senderRow.fish_inventory) {
-            let senderInv = senderRow.fish_inventory;
-            if (senderInv[fName]) {
-                let idx = senderInv[fName].indexOf(fSz);
-                if (idx > -1) {
-                    senderInv[fName].splice(idx, 1);
-                    if (senderInv[fName].length === 0) delete senderInv[fName];
+                if (!fishingData.fish_inventory[fName]) fishingData.fish_inventory[fName] = [];
+                fishingData.fish_inventory[fName].push(fSz);
 
-                    if (!fishingData.fish_inventory[fName]) fishingData.fish_inventory[fName] = [];
-                    fishingData.fish_inventory[fName].push(fSz);
+                let recordGrade = '일반';
+                let baseF = FISH_DATABASE.find(f => f.name === fName);
+                if (baseF) recordGrade = baseF.grade;
 
-                    let recordGrade = '일반';
-                    let baseF = FISH_DATABASE.find(f => f.name === fName);
-                    if (baseF) recordGrade = baseF.grade;
-
-                    if (!fishingData.fish_records[fName]) {
-                        fishingData.fish_records[fName] = { grade: recordGrade, maxSize: fSz };
-                    } else if (fSz > fishingData.fish_records[fName].maxSize) {
-                        fishingData.fish_records[fName].maxSize = fSz;
-                    }
-
-                    senderRow.money = (senderRow.money || 0) + moneyVal;
-                    fishingData.money -= moneyVal;
-
-                    await supabaseClient.from('user_fishing_data').update({
-                        fish_inventory: senderInv,
-                        money: senderRow.money,
-                        trade_request: null,
-                        updated_at: new Date()
-                    }).eq('nickname', senderPlayer);
+                if (!fishingData.fish_records[fName]) {
+                    fishingData.fish_records[fName] = { grade: recordGrade, maxSize: fSz };
+                } else if (fSz > fishingData.fish_records[fName].maxSize) {
+                    fishingData.fish_records[fName].maxSize = fSz;
                 }
             }
         }
-    } else {
-        const { data: senderRow } = await supabaseClient
-            .from('user_fishing_data')
-            .select('*')
-            .eq('nickname', senderPlayer)
-            .maybeSingle();
-
-        if (senderRow) {
-            senderRow.money = (senderRow.money || 0) + moneyVal;
-            fishingData.money -= moneyVal;
-
-            await supabaseClient.from('user_fishing_data').update({
-                money: senderRow.money,
-                trade_request: null,
-                updated_at: new Date()
-            }).eq('nickname', senderPlayer);
-        }
     }
+
+    senderRow.money = (senderRow.money || 0) + moneyVal;
+    fishingData.money -= moneyVal;
+
+    await supabaseClient.from('user_fishing_data').update({
+        fish_inventory: senderInv,
+        money: senderRow.money,
+        trade_request: null,
+        updated_at: new Date()
+    }).eq('nickname', senderPlayer);
 
     await saveFishingData();
     floatingAlertText = "🤝 다곤의 양방향 직거래가 완벽하게 체결되었습니다!";
@@ -542,7 +539,7 @@ function openDagonContractModal() {
             <div style="background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: left; border-top: 6px solid #292524;">
                 <h3 style="margin-top: 0; color: #292524; font-size: 1.2rem; font-weight: 900;">📜 다곤 파트너 계약 체결</h3>
                 <p style="font-size: 0.85rem; color: #475569; margin-bottom: 14px; line-height: 1.4;">
-                    함께 낚시를 진행하며 물고기 복사 파밍 효과를 공유할 상대 플레이어를 선택하세요.
+                    함께 낚시를 진행하며 물고기 파밍 효과를 공유할 상대 플레이어를 선택하세요.
                 </p>
                 
                 <div style="margin-bottom: 16px;">
@@ -1209,7 +1206,7 @@ function confirmNormalCatch() {
     renderFishingView(document.getElementById("contentArea"));
 }
 
-function executeCatchLogic() {
+async function executeCatchLogic() {
     let rand = Math.random() * 100;
     let rodLevel = fishingData.rod_level;
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
@@ -1277,7 +1274,36 @@ function executeCatchLogic() {
         }
     }
 
-    saveFishingData();
+    await saveFishingData();
+
+    // 💡 다곤 계약 파트너가 있다면 파트너에게도 동일 물고기 복사 지급
+    if (fishingData.dagon_partner) {
+        let partnerName = fishingData.dagon_partner;
+        const { data: partnerRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('*')
+            .eq('nickname', partnerName)
+            .maybeSingle();
+
+        if (partnerRow) {
+            let pInv = partnerRow.fish_inventory || {};
+            if (!pInv[fishName]) pInv[fishName] = [];
+            pInv[fishName].push(fishSize);
+
+            let pRec = partnerRow.fish_records || {};
+            if (!pRec[fishName]) {
+                pRec[fishName] = { grade: recordGrade, maxSize: recordSizeMax };
+            } else if (recordSizeMax > pRec[fishName].maxSize) {
+                pRec[fishName].maxSize = recordSizeMax;
+            }
+
+            await supabaseClient.from('user_fishing_data').update({
+                fish_inventory: pInv,
+                fish_records: pRec,
+                updated_at: new Date()
+            }).eq('nickname', partnerName);
+        }
+    }
 
     if (fishName !== '붕' && selectedFish.grade !== '신화' && !floatingAlertText) {
         floatingAlertText = `🎉 [${selectedFish.grade}] ${selectedFish.name} (${fishSize}cm) 획득!`;
