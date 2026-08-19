@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (어류 도감 가로 정렬 패치판)
+// fishing.js - 심해 낚시터 (다곤 계약 및 양방향 안전 직거래 완성판)
 
 let fishingData = { 
     money: 1000, 
@@ -10,7 +10,9 @@ let fishingData = {
     curse_remaining_count: 0,
     makara_bonus_chance: 0,
     siren_streak: 0,
-    bahamut_auto_active: true
+    bahamut_auto_active: true,
+    dagon_partner: null,
+    trade_request: null
 };
 
 let fishingStep = 'ready'; 
@@ -136,7 +138,9 @@ async function initFishing() {
             curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
             makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
             siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
-            bahamut_auto_active: true
+            bahamut_auto_active: true,
+            dagon_partner: data.dagon_partner || null,
+            trade_request: data.trade_request || null
         };
     } else {
         await supabaseClient.from('user_fishing_data').insert([{
@@ -149,13 +153,16 @@ async function initFishing() {
             cursed_target: currentUser,
             curse_remaining_count: 0,
             makara_bonus_chance: 0,
-            siren_streak: 0
+            siren_streak: 0,
+            dagon_partner: null,
+            trade_request: null
         }]);
-        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, bahamut_auto_active: true };
+        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, bahamut_auto_active: true, dagon_partner: null, trade_request: null };
     }
     hasUsedChance = false;
 
     startBahamutAutoFishing();
+    checkIncomingTradeRequests();
 }
 
 async function saveFishingData() {
@@ -181,11 +188,27 @@ async function saveFishingData() {
         curse_remaining_count: fishingData.curse_remaining_count,
         makara_bonus_chance: fishingData.makara_bonus_chance,
         siren_streak: fishingData.siren_streak,
+        dagon_partner: fishingData.dagon_partner,
+        trade_request: fishingData.trade_request,
         updated_at: new Date()
     }], { onConflict: 'nickname' });
 
     if (error) {
         console.error("🚨 Supabase 낚시 데이터 저장 실패:", error.message);
+    }
+}
+
+async function checkIncomingTradeRequests() {
+    if (!currentUser) return;
+    const { data } = await supabaseClient
+        .from('user_fishing_data')
+        .select('trade_request')
+        .eq('nickname', currentUser)
+        .maybeSingle();
+
+    if (data && data.trade_request) {
+        let req = data.trade_request;
+        showTradeConfirmationPopup(req.sender, req.fishVal, req.moneyVal);
     }
 }
 
@@ -247,8 +270,10 @@ function showBeastDetail(beastName) {
                 </div>
             `;
         } else if (beastName === '다곤') {
+            let partnerDisplay = fishingData.dagon_partner ? `<b style="color: #16a34a;">${fishingData.dagon_partner}</b>` : `<b style="color: #dc2626;">없음 (미체결)</b>`;
             extraAction = `
                 <div style="margin-top: 12px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.85rem; color: #334155; margin-bottom: 8px;">📜 현재 다곤 계약 파트너: ${partnerDisplay}</div>
                     <button onclick="openTradeModal()" style="width: 100%; background: #78716c; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer; margin-bottom: 6px;">🤝 플레이어 물고기/자금 직거래</button>
                     <button onclick="openDagonContractModal()" style="width: 100%; background: #292524; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer;">📜 다곤 계약 맺기</button>
                 </div>
@@ -289,6 +314,12 @@ function showBeastDetail(beastName) {
 }
 
 function openTradeModal() {
+    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+    if (!hasDagon) {
+        alert("다곤 영물을 보유하고 있어야 직거래를 할 수 있습니다!");
+        return;
+    }
+
     let existingModal = document.getElementById('beastModal');
     if (existingModal) existingModal.remove();
 
@@ -310,7 +341,7 @@ function openTradeModal() {
         <div id="tradeModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000;">
             <div style="background: white; width: 90%; max-width: 440px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: left; border-top: 6px solid #78716c;">
                 <h3 style="margin-top: 0; color: #78716c; font-size: 1.2rem; font-weight: 900;">🤝 다곤 양방향 안전 직거래</h3>
-                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 14px;">현재 보유 중인 물고기와 소지금을 상대방과 교환합니다. <b>양측 모두 최종 확인을 눌러야만 거래가 체결됩니다.</b></p>
+                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 14px;">상대방에게 직거래 제안을 보냅니다. <b>상대방이 접속하여 수락을 눌러야만 거래가 성립됩니다.</b></p>
                 
                 <div style="margin-bottom: 10px;">
                     <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">거래할 상대 플레이어:</label>
@@ -340,7 +371,7 @@ function openTradeModal() {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 
-function requestTrade() {
+async function requestTrade() {
     let target = document.getElementById('tradeTargetPlayer').value;
     let fishVal = document.getElementById('tradeMyFish').value;
     let moneyVal = parseInt(document.getElementById('tradeMyMoney').value) || 0;
@@ -351,24 +382,52 @@ function requestTrade() {
     }
 
     document.getElementById('tradeModal').remove();
-    showTradeConfirmationPopup(target, fishVal, moneyVal);
+
+    const { data: targetRow } = await supabaseClient
+        .from('user_fishing_data')
+        .select('*')
+        .eq('nickname', target)
+        .maybeSingle();
+
+    if (!targetRow) {
+        alert("상대방의 낚시 데이터가 존재하지 않습니다.");
+        return;
+    }
+
+    let targetDataJson = {
+        sender: currentUser,
+        fishVal: fishVal,
+        moneyVal: moneyVal
+    };
+
+    await supabaseClient.from('user_fishing_data').update({
+        trade_request: targetDataJson,
+        updated_at: new Date()
+    }).eq('nickname', target);
+
+    floatingAlertText = `🤝 [${target}] 님에게 직거래 제안을 전송했습니다. 상대 수락 대기 중...`;
+    renderFishingView(document.getElementById("contentArea"));
+    setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 3000);
 }
 
-function showTradeConfirmationPopup(targetPlayer, fishVal, moneyVal) {
+function showTradeConfirmationPopup(senderPlayer, fishVal, moneyVal) {
+    let existing = document.getElementById('tradeConfirmModal');
+    if (existing) existing.remove();
+
     let fishDesc = fishVal ? fishVal.replace(':', ' (') + 'cm)' : '없음';
 
     let popupHtml = `
         <div id="tradeConfirmModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
             <div style="background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); text-align: center; border-top: 6px solid #0284c7;">
-                <h3 style="margin-top: 0; color: #0284c7; font-size: 1.1rem; font-weight: 900;">🤝 [다곤 직거래 제안 확인]</h3>
+                <h3 style="margin-top: 0; color: #0284c7; font-size: 1.1rem; font-weight: 900;">🤝 [다곤 직거래 제안 도착]</h3>
                 <p style="font-size: 0.9rem; color: #334155; line-height: 1.5; margin: 14px 0;">
-                    <b>[${targetPlayer}]</b> 님이 거래를 수락했습니다.<br>
-                    - 내가 건내는 항목: <b>${fishDesc} / ${moneyVal.toLocaleString()}원</b><br><br>
-                    양측 모두 최종 확인을 누르면 거래가 완료됩니다.
+                    <b>[${senderPlayer}]</b> 님이 직거래를 제안했습니다.<br>
+                    - 받는 항목: <b>${fishDesc} / ${moneyVal.toLocaleString()}원</b><br><br>
+                    수락 시 내 자금과 보관고에 반영됩니다.
                 </p>
                 <div style="display: flex; gap: 10px;">
-                    <button onclick="executeTrade('${fishVal}', ${moneyVal})" style="flex: 1; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">최종 확인 (거래 체결)</button>
-                    <button onclick="cancelTrade()" style="flex: 1; background: #dc2626; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">취소 (거절)</button>
+                    <button onclick="executeTrade('${senderPlayer}', '${fishVal}', ${moneyVal})" style="flex: 1; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">최종 수락</button>
+                    <button onclick="cancelTrade('${senderPlayer}')" style="flex: 1; background: #dc2626; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절</button>
                 </div>
             </div>
         </div>
@@ -376,40 +435,103 @@ function showTradeConfirmationPopup(targetPlayer, fishVal, moneyVal) {
     document.body.insertAdjacentHTML('beforeend', popupHtml);
 }
 
-async function executeTrade(fishVal, moneyVal) {
+async function executeTrade(senderPlayer, fishVal, moneyVal) {
     document.getElementById('tradeConfirmModal').remove();
 
     if (moneyVal > 0) {
-        fishingData.money -= moneyVal;
+        if (fishingData.money < moneyVal) {
+            alert("거래에 필요한 소지금이 부족합니다!");
+            return;
+        }
     }
 
     if (fishVal) {
         let [fName, fSzStr] = fishVal.split(':');
         let fSz = parseInt(fSzStr);
-        let arr = fishingData.fish_inventory[fName];
-        if (arr) {
-            let idx = arr.indexOf(fSz);
-            if (idx > -1) {
-                arr.splice(idx, 1);
-                if (arr.length === 0) delete fishingData.fish_inventory[fName];
+
+        const { data: senderRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('*')
+            .eq('nickname', senderPlayer)
+            .maybeSingle();
+
+        if (senderRow && senderRow.fish_inventory) {
+            let senderInv = senderRow.fish_inventory;
+            if (senderInv[fName]) {
+                let idx = senderInv[fName].indexOf(fSz);
+                if (idx > -1) {
+                    senderInv[fName].splice(idx, 1);
+                    if (senderInv[fName].length === 0) delete senderInv[fName];
+
+                    if (!fishingData.fish_inventory[fName]) fishingData.fish_inventory[fName] = [];
+                    fishingData.fish_inventory[fName].push(fSz);
+
+                    let recordGrade = '일반';
+                    let baseF = FISH_DATABASE.find(f => f.name === fName);
+                    if (baseF) recordGrade = baseF.grade;
+
+                    if (!fishingData.fish_records[fName]) {
+                        fishingData.fish_records[fName] = { grade: recordGrade, maxSize: fSz };
+                    } else if (fSz > fishingData.fish_records[fName].maxSize) {
+                        fishingData.fish_records[fName].maxSize = fSz;
+                    }
+
+                    senderRow.money = (senderRow.money || 0) + moneyVal;
+                    fishingData.money -= moneyVal;
+
+                    await supabaseClient.from('user_fishing_data').update({
+                        fish_inventory: senderInv,
+                        money: senderRow.money,
+                        trade_request: null,
+                        updated_at: new Date()
+                    }).eq('nickname', senderPlayer);
+                }
             }
+        }
+    } else {
+        const { data: senderRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('*')
+            .eq('nickname', senderPlayer)
+            .maybeSingle();
+
+        if (senderRow) {
+            senderRow.money = (senderRow.money || 0) + moneyVal;
+            fishingData.money -= moneyVal;
+
+            await supabaseClient.from('user_fishing_data').update({
+                money: senderRow.money,
+                trade_request: null,
+                updated_at: new Date()
+            }).eq('nickname', senderPlayer);
         }
     }
 
     await saveFishingData();
-    floatingAlertText = "🤝 다곤의 직거래가 안전하게 체결되었습니다!";
+    floatingAlertText = "🤝 다곤의 양방향 직거래가 완벽하게 체결되었습니다!";
     renderFishingView(document.getElementById("contentArea"));
     setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 2500);
 }
 
-function cancelTrade() {
+async function cancelTrade(senderPlayer) {
     document.getElementById('tradeConfirmModal').remove();
-    floatingAlertText = "❌ 거래가 취소되었습니다.";
+    await supabaseClient.from('user_fishing_data').update({
+        trade_request: null,
+        updated_at: new Date()
+    }).eq('nickname', currentUser);
+
+    floatingAlertText = "❌ 직거래 제안을 거절했습니다.";
     renderFishingView(document.getElementById("contentArea"));
     setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 2500);
 }
 
 function openDagonContractModal() {
+    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+    if (!hasDagon) {
+        alert("다곤 영물을 보유하고 있어야 계약을 맺을 수 있습니다!");
+        return;
+    }
+
     let existingModal = document.getElementById('beastModal');
     if (existingModal) existingModal.remove();
 
@@ -420,7 +542,7 @@ function openDagonContractModal() {
             <div style="background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: left; border-top: 6px solid #292524;">
                 <h3 style="margin-top: 0; color: #292524; font-size: 1.2rem; font-weight: 900;">📜 다곤 파트너 계약 체결</h3>
                 <p style="font-size: 0.85rem; color: #475569; margin-bottom: 14px; line-height: 1.4;">
-                    함께 낚시를 진행하며 물고기 복사 파밍 효과를 공유할 상대 플레이어를 선택하세요. (본인도 다곤을 보유해야 합니다)
+                    함께 낚시를 진행하며 물고기 복사 파밍 효과를 공유할 상대 플레이어를 선택하세요.
                 </p>
                 
                 <div style="margin-bottom: 16px;">
@@ -430,7 +552,7 @@ function openDagonContractModal() {
                     </select>
                 </div>
 
-                <button onclick="submitDagonContract()" style="width: 100%; background: #292524; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-bottom: 8px;">계약 제안 보내기</button>
+                <button onclick="submitDagonContract()" style="width: 100%; background: #292524; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-bottom: 8px;">계약 체결하기</button>
                 <button onclick="document.getElementById('dagonContractModal').remove()" style="width: 100%; background: #64748b; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">닫기</button>
             </div>
         </div>
@@ -438,12 +560,15 @@ function openDagonContractModal() {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 
-function submitDagonContract() {
+async function submitDagonContract() {
     let partner = document.getElementById('dagonPartnerSelect').value;
     let modal = document.getElementById('dagonContractModal');
     if (modal) modal.remove();
 
-    floatingAlertText = `📜 [${partner}] 님에게 다곤 파트너 계약 제안을 보냈습니다!`;
+    fishingData.dagon_partner = partner;
+    await saveFishingData();
+
+    floatingAlertText = `📜 [${partner}] 님과 다곤 파트너 계약이 체결되었습니다!`;
     renderFishingView(document.getElementById("contentArea"));
     setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 2500);
 }
@@ -564,6 +689,15 @@ async function renderFishingView(contentArea) {
         }
     }
 
+    let dagonContractBanner = "";
+    if (fishingData.dagon_partner) {
+        dagonContractBanner = `
+            <div style="background: #f8fafc; border: 1px solid #78716c; color: #292524; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                📜 다곤 계약 파트너: <b style="color: #0284c7;">[ ${fishingData.dagon_partner} ]</b> 님과 파밍 효과 공유 중
+            </div>
+        `;
+    }
+
     let hasBahamut = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('바하무트');
     let effectiveCost = hasBahamut ? 0 : currentRod.cost;
 
@@ -653,7 +787,6 @@ async function renderFishingView(contentArea) {
         });
     }
 
-    // 💡 [수정됨] 어류 도감 리스트 카드형 가로 정렬 및 줄바꿈 방지 적용
     let recordsHtml = "";
     if (sortedRecords.length === 0) {
         recordsHtml = `<p class="empty-msg" style="padding: 10px 0;">아직 등록된 어류 도감이 없습니다.</p>`;
@@ -705,6 +838,7 @@ async function renderFishingView(contentArea) {
                 <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
             </div>
 
+            ${dagonContractBanner}
             ${curseWarningBanner}
 
             <div style="display: flex; justify-content: space-around; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; text-align: center;">
