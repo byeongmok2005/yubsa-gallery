@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (다곤 직거래실 단방향 제안 및 안전 교환 확정 최종 안정판)
+// fishing.js - 심해 낚시터 (다곤 직거래 제안 수신 및 전체 판매 기능 완벽 반영 최종본)
 
 let fishingData = { 
     money: 1000, 
@@ -336,7 +336,28 @@ async function loadAndShowDmTradeModal(targetPlayerName) {
     let incomingFish = "";
     let incomingMoney = 0;
     
-    // 상대방이 나에게 보낸 제안서 확인
+    // 내 DB(currentUser)에 저장된 trade_request 확인 (상대방이 나에게 보낸 제안)
+    try {
+        const { data: myRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('trade_request')
+            .eq('nickname', currentUser)
+            .maybeSingle();
+
+        if (myRow && myRow.trade_request) {
+            let req = myRow.trade_request;
+            // 상대방이 보낸 제안인지 확인
+            if (req.sender === targetPlayerName) {
+                incomingFish = req.fishVal || "";
+                incomingMoney = req.moneyVal || 0;
+            }
+        }
+    } catch (e) {
+        console.warn("내 제안함 조회 실패:", e);
+    }
+
+    let myActiveFish = "";
+    let myActiveMoney = 0;
     try {
         const { data: targetRow } = await supabaseClient
             .from('user_fishing_data')
@@ -346,30 +367,13 @@ async function loadAndShowDmTradeModal(targetPlayerName) {
 
         if (targetRow && targetRow.trade_request) {
             let req = targetRow.trade_request;
-            if (req.target === currentUser) {
-                incomingFish = req.fishVal || "";
-                incomingMoney = req.moneyVal || 0;
+            if (req.sender === currentUser) {
+                myActiveFish = req.fishVal || "";
+                myActiveMoney = req.moneyVal || 0;
             }
         }
     } catch (e) {
-        console.warn("상대방 제안 조회 실패:", e);
-    }
-
-    let myActiveFish = "";
-    let myActiveMoney = 0;
-    try {
-        const { data: myRow } = await supabaseClient
-            .from('user_fishing_data')
-            .select('trade_request')
-            .eq('nickname', currentUser)
-            .maybeSingle();
-
-        if (myRow && myRow.trade_request && myRow.trade_request.target === targetPlayerName) {
-            myActiveFish = myRow.trade_request.fishVal || "";
-            myActiveMoney = myRow.trade_request.moneyVal || 0;
-        }
-    } catch (e) {
-        console.warn("내 제안 조회 실패:", e);
+        console.warn("상대방 DB 조회 실패:", e);
     }
 
     showDmTradeModalView(targetPlayerName, incomingFish, incomingMoney, myActiveFish, myActiveMoney);
@@ -491,13 +495,13 @@ async function sendDmTradeRequest() {
         moneyVal: moneyVal
     };
 
-    // 내 제안을 상대방에게 저장 (상대방의 trade_request에 기록하여 나에게 오는 제안이 되도록 함)
+    // 상대방(target)의 DB에 내 제안을 저장하여, 상대방이 나를 선택했을 때 읽어올 수 있게 함
     await supabaseClient.from('user_fishing_data').update({
         trade_request: tradeDataJson,
         updated_at: new Date()
     }).eq('nickname', target);
 
-    alert(`[${target}]님에게 거래 제안서를 전송했습니다! 상대방이 직거래실에서 승인하면 교환이 완료됩니다.`);
+    alert(`[${target}]님에게 거래 제안서를 전송했습니다!`);
     loadAndShowDmTradeModal(target);
 }
 
@@ -507,45 +511,44 @@ async function acceptDmTrade(targetPlayerName, hasOffer) {
         return;
     }
 
-    // 1. 상대방의 제안 내용 가져오기
-    const { data: partnerRow } = await supabaseClient
+    // 1. 내 DB에 저장된 상대방의 제안 내용 가져오기
+    const { data: myRow } = await supabaseClient
+        .from('user_fishing_data')
+        .select('*')
+        .eq('nickname', currentUser)
+        .maybeSingle();
+
+    if (!myRow || !myRow.trade_request) {
+        alert("상대방의 제안 정보를 찾을 수 없습니다.");
+        return;
+    }
+
+    let partnerReq = myRow.trade_request;
+    let partnerSendFish = partnerReq.fishVal || '';
+    let partnerSendMoney = partnerReq.moneyVal || 0;
+
+    // 2. 상대방 DB에 저장된 나의 제안 내용 가져오기
+    const { data: targetRow } = await supabaseClient
         .from('user_fishing_data')
         .select('*')
         .eq('nickname', targetPlayerName)
         .maybeSingle();
 
-    if (!partnerRow || !partnerRow.trade_request) {
-        alert("상대방의 제안 정보를 찾을 수 없습니다.");
-        return;
-    }
+    let targetReq = (targetRow && targetRow.trade_request) ? targetRow.trade_request : {};
+    let mySendFish = targetReq.fishVal || '';
+    let mySendMoney = targetReq.moneyVal || 0;
 
-    let partnerReq = partnerRow.trade_request;
-    let partnerSendFish = partnerReq.fishVal || '';
-    let partnerSendMoney = partnerReq.moneyVal || 0;
-
-    // 2. 내가 상대방에게 보내기로 한 제안 내용 가져오기 (내 DB의 trade_request)
-    const { data: myRow } = await supabaseClient
-        .from('user_fishing_data')
-        .select('trade_request')
-        .eq('nickname', currentUser)
-        .maybeSingle();
-
-    let myReq = (myRow && myRow.trade_request) ? myRow.trade_request : {};
-    let mySendFish = myReq.fishVal || '';
-    let mySendMoney = myReq.moneyVal || 0;
-
-    // 소지금 검증
     if (mySendMoney > fishingData.money) {
         alert("보유 소지금보다 많은 금액을 교환하려고 합니다!");
         return;
     }
-    if (partnerSendMoney > (partnerRow.money || 0)) {
+    if (partnerSendMoney > (targetRow.money || 0)) {
         alert("상대방의 소지금이 부족하여 거래를 진행할 수 없습니다.");
         return;
     }
 
-    // 3. 아이템 및 소지금 교환 실행 (내 인벤토리 반영)
-    // (1) 내가 보낸 물고기 차감 -> 상대방 인벤토리에 추가
+    // 3. 인벤토리 및 소지금 교환 적용
+    // (1) 내가 보낸 물고기 내 인벤토리에서 차감 -> 상대방 인벤토리에 추가
     if (mySendFish) {
         let [fName, fSzStr] = mySendFish.split(':');
         let fSz = parseInt(fSzStr);
@@ -555,24 +558,24 @@ async function acceptDmTrade(targetPlayerName, hasOffer) {
                 fishingData.fish_inventory[fName].splice(idx, 1);
                 if (fishingData.fish_inventory[fName].length === 0) delete fishingData.fish_inventory[fName];
 
-                if (!partnerRow.fish_inventory) partnerRow.fish_inventory = {};
-                if (!partnerRow.fish_inventory[fName]) partnerRow.fish_inventory[fName] = [];
-                partnerRow.fish_inventory[fName].push(fSz);
+                if (!targetRow.fish_inventory) targetRow.fish_inventory = {};
+                if (!targetRow.fish_inventory[fName]) targetRow.fish_inventory[fName] = [];
+                targetRow.fish_inventory[fName].push(fSz);
 
                 let baseF = FISH_DATABASE.find(f => f.name === fName);
                 let recordGrade = baseF ? baseF.grade : '일반';
-                if (!partnerRow.fish_records) partnerRow.fish_records = {};
-                if (!partnerRow.fish_records[fName]) {
-                    partnerRow.fish_records[fName] = { grade: recordGrade, maxSize: fSz };
-                } else if (fSz > partnerRow.fish_records[fName].maxSize) {
-                    partnerRow.fish_records[fName].maxSize = fSz;
+                if (!targetRow.fish_records) targetRow.fish_records = {};
+                if (!targetRow.fish_records[fName]) {
+                    targetRow.fish_records[fName] = { grade: recordGrade, maxSize: fSz };
+                } else if (fSz > targetRow.fish_records[fName].maxSize) {
+                    targetRow.fish_records[fName].maxSize = fSz;
                 }
             }
         }
     }
 
-    // (2) 상대방이 보낸 물고기 차감 -> 내 인벤토리에 추가
-    let pInv = partnerRow.fish_inventory || {};
+    // (2) 상대방이 보낸 물고기 상대방 인벤토리에서 차감 -> 내 인벤토리에 추가
+    let pInv = targetRow.fish_inventory || {};
     if (partnerSendFish) {
         let [fName, fSzStr] = partnerSendFish.split(':');
         let fSz = parseInt(fSzStr);
@@ -598,13 +601,13 @@ async function acceptDmTrade(targetPlayerName, hasOffer) {
 
     // (3) 소지금 스왑
     fishingData.money = fishingData.money - mySendMoney + partnerSendMoney;
-    partnerRow.money = (partnerRow.money || 0) - partnerSendMoney + mySendMoney;
+    targetRow.money = (targetRow.money || 0) - partnerSendMoney + mySendMoney;
 
-    // 4. 데이터베이스에 각각 반영 및 거래 요청 초기화
+    // 4. 데이터베이스 저장 및 거래요청 초기화
     await supabaseClient.from('user_fishing_data').update({
         fish_inventory: pInv,
-        fish_records: partnerRow.fish_records,
-        money: partnerRow.money,
+        fish_records: targetRow.fish_records,
+        money: targetRow.money,
         trade_request: null,
         updated_at: new Date()
     }).eq('nickname', targetPlayerName);
@@ -628,6 +631,51 @@ async function cancelDmTrade(targetPlayerName) {
         updated_at: new Date()
     }).eq('nickname', currentUser);
 
+    let currentScroll = window.scrollY;
+    renderFishingView(document.getElementById("contentArea"));
+    window.scrollTo(0, currentScroll);
+}
+
+async function sellAllFish() {
+    if (!fishingData.fish_inventory || Object.keys(fishingData.fish_inventory).length === 0) {
+        alert("판매할 물고기가 없습니다!");
+        return;
+    }
+
+    if (!confirm("보관고에 있는 모든 물고기를 일괄 판매하시겠습니까?")) return;
+
+    let totalEarn = 0;
+    let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
+    let hasSiren = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('시레인 크로인');
+
+    for (let [fishName, sizesArr] of Object.entries(fishingData.fish_inventory)) {
+        if (!sizesArr || sizesArr.length === 0) continue;
+        let baseFish = FISH_DATABASE.find(f => f.name === fishName);
+
+        sizesArr.forEach(targetSize => {
+            let sellPrice = 0;
+            if (fishName === '붕') {
+                sellPrice = 1000000;
+            } else if (fishName === '길냥이의 물고기') {
+                sellPrice = targetSize;
+            } else {
+                let baseUnit = baseFish ? baseFish.basePrice : 20;
+                let calculatedBase = Math.floor(baseUnit * (targetSize / 10));
+                sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase;
+            }
+
+            if (hasSiren && (fishName === '레비아탄' || fishName === '크라켄' || fishName === '아스피도켈론')) {
+                sellPrice = Math.floor(sellPrice * 1.5);
+            }
+            totalEarn += sellPrice;
+        });
+    }
+
+    fishingData.fish_inventory = {};
+    fishingData.money += totalEarn;
+    await saveFishingData();
+
+    alert(`💰 모든 물고기를 일괄 판매하여 총 ${totalEarn.toLocaleString()}원을 획득했습니다!`);
     let currentScroll = window.scrollY;
     renderFishingView(document.getElementById("contentArea"));
     window.scrollTo(0, currentScroll);
@@ -971,7 +1019,10 @@ async function renderFishingView(contentArea) {
                 ` : `<div style="text-align: center; font-size: 0.85rem; font-weight: 700; color: #7c3aed;">👑 만렙 궁극의 낚시대를 보유하고 있습니다!</div>`}
             </div>
 
-            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">🎒 잡은 물고기 보관고 (판매 가능)</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
+                <h3 style="font-size: 1rem; font-weight: 700; margin: 0;">🎒 잡은 물고기 보관고 (판매 가능)</h3>
+                <button onclick="sellAllFish()" style="background: #dc2626; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">🚨 전체 판매</button>
+            </div>
             <div style="display: flex; flex-direction: column; max-height: 200px; overflow-y: auto; margin-bottom: 16px;">
                 ${inventoryHtml}
             </div>
