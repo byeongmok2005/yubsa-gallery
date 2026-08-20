@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (상태 배너, 교환 내역 요약, 낚시 성공 알림 최종 완성본)
+// fishing.js - 심해 낚시터 (제안 보낸 사람 알림 동기화 및 바하무트 상태 저장 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -140,7 +140,7 @@ async function initFishing() {
             curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
             makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
             siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
-            bahamut_auto_active: true,
+            bahamut_auto_active: data.bahamut_auto_active !== undefined ? data.bahamut_auto_active : true,
             dagon_partner: data.dagon_partner || null,
             trade_request: data.trade_request || null
         };
@@ -156,6 +156,7 @@ async function initFishing() {
             curse_remaining_count: 0,
             makara_bonus_chance: 0,
             siren_streak: 0,
+            bahamut_auto_active: true,
             dagon_partner: null,
             trade_request: null
         }]);
@@ -189,6 +190,7 @@ async function saveFishingData() {
         curse_remaining_count: fishingData.curse_remaining_count,
         makara_bonus_chance: fishingData.makara_bonus_chance,
         siren_streak: fishingData.siren_streak,
+        bahamut_auto_active: fishingData.bahamut_auto_active,
         dagon_partner: fishingData.dagon_partner,
         trade_request: fishingData.trade_request,
         updated_at: new Date()
@@ -226,9 +228,11 @@ function showFloatingAlert(text) {
     }, 3500);
 }
 
-function toggleBahamutAuto() {
+async function toggleBahamutAuto() {
     let currentScroll = window.scrollY;
     fishingData.bahamut_auto_active = !fishingData.bahamut_auto_active;
+    await saveFishingData();
+
     let statusMsg = fishingData.bahamut_auto_active ? "활성화 (30초마다 자동 낚시)" : "비활성화 (정지됨)";
     showFloatingAlert(`🌍 바하무트 자동 사냥: ${statusMsg}`);
     
@@ -346,7 +350,6 @@ async function openTradeModal() {
     let contentHtml = "";
 
     if (incomingRequest) {
-        // 나에게 온 제안이 있는 경우
         let senderName = incomingRequest.sender;
         let fishStr = incomingRequest.fishVal ? incomingRequest.fishVal.replace(':', ' (') + 'cm)' : '물고기 없음';
         let moneyStr = incomingRequest.moneyVal ? incomingRequest.moneyVal.toLocaleString() + '원' : '0원';
@@ -356,12 +359,11 @@ async function openTradeModal() {
                 <div style="font-size: 0.85rem; font-weight: 800; color: #be185d; margin-bottom: 8px; text-align: center;">📬 [${senderName}] 님으로부터 제안이 도착했습니다!</div>
                 <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #334155; margin-bottom: 4px;">보낸 물고기: <b>${fishStr}</b></div>
                 <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #16a34a; font-weight: 700; margin-bottom: 10px;">보낸 소지금: <b>${moneyStr}</b></div>
-                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-bottom: 6px;">🚪 직거래 방 입장 및 교환 승인</button>
+                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 900; font-weight: 900; cursor: pointer; margin-bottom: 6px;">🚪 직거래 방 입장 및 교환 승인</button>
                 <button onclick="rejectIncomingTrade()" style="width: 100%; background: #64748b; color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절하기</button>
             </div>
         `;
     } else {
-        // 제안 보내기 입력 폼
         let myInventoryOptions = `<option value="">(물고기 선택 안 함)</option>`;
         if (fishingData.fish_inventory) {
             for (let [fishName, sizes] of Object.entries(fishingData.fish_inventory)) {
@@ -436,7 +438,7 @@ async function sendDmTradeRequest() {
         target: target,
         fishVal: fishVal,
         moneyVal: moneyVal,
-        status: 'waiting' // 대기 중 상태
+        status: 'waiting'
     };
 
     await supabaseClient.from('user_fishing_data').update({
@@ -453,7 +455,6 @@ async function sendDmTradeRequest() {
 }
 
 async function cancelMyTradeRequest() {
-    // 상대방 DB의 trade_request 초기화
     const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
     if (allRows) {
         allRows.forEach(async (row) => {
@@ -473,19 +474,28 @@ async function cancelMyTradeRequest() {
 }
 
 async function rejectIncomingTrade() {
+    // 상대방(sender)에게 거절 상태를 알리기 위해 trade_request에 status: 'rejected' 기록
+    const { data: myRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle();
+    if (myRow && myRow.trade_request) {
+        let senderName = myRow.trade_request.sender;
+        await supabaseClient.from('user_fishing_data').update({
+            trade_request: { ...myRow.trade_request, status: 'rejected' },
+            updated_at: new Date()
+        }).eq('nickname', senderName);
+    }
+
     await supabaseClient.from('user_fishing_data').update({
         trade_request: null,
         updated_at: new Date()
     }).eq('nickname', currentUser);
+
     alert("제안을 거절했습니다.");
     openTradeModal();
 }
 
-// 직거래 방 입장 및 최종 교환 수락 창
 async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
     closeAllModals();
 
-    // 상대방(sender)에게 내가 승인했음을 알리기 위해 상태 업데이트 가능
     const { data: partnerRow } = await supabaseClient
         .from('user_fishing_data')
         .select('trade_request')
@@ -493,7 +503,7 @@ async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
         .maybeSingle();
 
     if (partnerRow && partnerRow.trade_request) {
-        partnerRow.trade_request.status = 'picking'; // 상대방이 고르는 중 상태로 전환
+        partnerRow.trade_request.status = 'picking';
         await supabaseClient.from('user_fishing_data').update({
             trade_request: partnerRow.trade_request,
             updated_at: new Date()
@@ -631,15 +641,26 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     }
 
     // 3. 소지금 스왑
+    let oldMyMoney = fishingData.money;
     fishingData.money = fishingData.money - mySendMoney + partnerMoney;
     partnerRow.money = (partnerRow.money || 0) - partnerMoney + mySendMoney;
 
-    // 4. DB 반영 및 제안 초기화
+    // 4. DB 반영 (상대방 DB에 trade_request를 'completed' 상태와 주고받은 내역 기록하여 제안 보낸 사람도 감지하게 함)
+    let completedTradeInfo = {
+        status: 'completed',
+        sender: partnerName,
+        target: currentUser,
+        gaveFish: partnerFish,
+        gaveMoney: partnerMoney,
+        gotFish: mySendFish,
+        gotMoney: mySendMoney
+    };
+
     await supabaseClient.from('user_fishing_data').update({
         fish_inventory: pInv,
         fish_records: partnerRow.fish_records,
         money: partnerRow.money,
-        trade_request: null,
+        trade_request: completedTradeInfo,
         updated_at: new Date()
     }).eq('nickname', partnerName);
 
@@ -648,7 +669,6 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
 
     closeAllModals();
 
-    // 내가 준 것과 받은 것 요약 팝업 표시
     let gaveFishStr = mySendFish ? mySendFish.replace(':', ' (') + 'cm)' : '물고기 없음';
     let gaveMoneyStr = mySendMoney.toLocaleString() + '원';
     let gotFishStr = partnerFish ? partnerFish.replace(':', ' (') + 'cm)' : '물고기 없음';
@@ -661,7 +681,7 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     window.scrollTo(0, currentScroll);
 }
 
-// 낚시터 렌더링 뷰 (대기 배너 포함)
+// 낚시터 렌더링 뷰 (제안 보낸 사람의 완료/거절/대기 상태 감지 배너 포함)
 async function renderFishingView(contentArea) {
     let currentRod = ROD_TIERS[fishingData.rod_level];
     let nextRod = ROD_TIERS[fishingData.rod_level + 1];
@@ -670,15 +690,37 @@ async function renderFishingView(contentArea) {
     let statusText = "";
     let statusColor = "#0369a1";
 
-    // 대기 중인 직거래 상태 확인 배너
     let tradeStatusBanner = "";
     try {
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
-            allRows.forEach(row => {
+            for (let row of allRows) {
+                // 내가 제안을 보낸 경우 (상대방 DB에 내 이름이 sender로 등록됨)
                 if (row.trade_request && row.trade_request.sender === currentUser) {
                     let target = row.trade_request.target;
-                    if (row.trade_request.status === 'picking') {
+                    let reqStatus = row.trade_request.status;
+
+                    if (reqStatus === 'completed') {
+                        // 거래가 완료됨! 제안 보낸 사람도 무엇을 주고받았는지 확인 가능
+                        let tInfo = row.trade_request;
+                        let myGaveFish = tInfo.gotFish ? tInfo.gotFish.replace(':', ' (') + 'cm)' : '물고기 없음';
+                        let myGaveMoney = (tInfo.gotMoney || 0).toLocaleString() + '원';
+                        let myGotFish = tInfo.gaveFish ? tInfo.gaveFish.replace(':', ' (') + 'cm)' : '물고기 없음';
+                        let myGotMoney = (tInfo.gaveMoney || 0).toLocaleString() + '원';
+
+                        // 팝업 한 번 띄워주고 데이터 정리
+                        alert(`🎉 [직거래 성사 완료]\n\n📤 [내가 준 품목]\n- 물고기: ${myGaveFish}\n- 소지금: ${myGaveMoney}\n\n📥 [내가 받은 품목]\n- 물고기: ${myGotFish}\n- 소지금: ${myGotMoney}`);
+                        
+                        // 내 인벤토리/자금 갱신을 위해 데이터 재조회 후 제안 초기화
+                        await initFishing();
+                        await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        return;
+                    } else if (reqStatus === 'rejected') {
+                        alert(`❌ [${target}] 님께서 직거래 제안을 거절했습니다.`);
+                        await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        await initFishing();
+                        return;
+                    } else if (reqStatus === 'picking') {
                         tradeStatusBanner = `
                             <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
                                 ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
@@ -693,7 +735,7 @@ async function renderFishingView(contentArea) {
                         `;
                     }
                 }
-            });
+            }
         }
     } catch (e) {}
 
