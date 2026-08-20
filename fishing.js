@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (메이플 스타일 1:1 교환 창 및 테스터 제한 완성판)
+// fishing.js - 심해 낚시터 (메이플 스타일 1:1 교환 품목 전송 및 수락 완벽 패치판)
 
 let fishingData = { 
     money: 1000, 
@@ -424,9 +424,18 @@ function showMapleTradeModal(targetPlayerOrSender, incomingFish, incomingMoney, 
 }
 
 async function sendMapleTradeRequest() {
-    let target = document.getElementById('mapleTarget').value;
-    let fishVal = document.getElementById('mapleMyFish').value;
-    let moneyVal = parseInt(document.getElementById('mapleMyMoney').value) || 0;
+    let targetSelect = document.getElementById('mapleTarget');
+    let fishSelect = document.getElementById('mapleMyFish');
+    let moneyInput = document.getElementById('mapleMyMoney');
+
+    if (!targetSelect || !fishSelect || !moneyInput) {
+        alert("교환 창 요소를 불러오지 못했습니다. 다시 시도해 주세요.");
+        return;
+    }
+
+    let target = targetSelect.value;
+    let fishVal = fishSelect.value;
+    let moneyVal = parseInt(moneyInput.value) || 0;
 
     if (moneyVal > fishingData.money) {
         alert("보유 소지금보다 많은 금액을 올릴 수 없습니다!");
@@ -466,10 +475,6 @@ async function executeMapleTrade(senderPlayer) {
     let modal = document.getElementById('mapleTradeModal');
     if (modal) modal.remove();
 
-    // 내가 올리려던 값 가져오기
-    let myFishVal = document.getElementById('mapleMyFish') ? document.getElementById('mapleMyFish').value : '';
-    let myMoneyVal = 0; // 수락하는 측은 상대가 보낸 품목을 받는 동시에 기본 교환 성립
-
     const { data: senderRow } = await supabaseClient
         .from('user_fishing_data')
         .select('*')
@@ -484,12 +489,6 @@ async function executeMapleTrade(senderPlayer) {
     let senderReq = senderRow.trade_request || {};
     let senderFishVal = senderReq.fishVal || '';
     let senderMoneyVal = senderReq.moneyVal || 0;
-
-    // 자금 검증
-    if (fishingData.money < myMoneyVal) {
-        alert("보유 소지금이 부족합니다!");
-        return;
-    }
 
     // 1. 상대방 인벤토리에서 상대방이 올린 물고기 빼서 내게 넣기
     let senderInv = senderRow.fish_inventory || {};
@@ -516,36 +515,9 @@ async function executeMapleTrade(senderPlayer) {
         }
     }
 
-    // 2. 내 인벤토리에서 내가 올린 물고기 빼서 상대방에게 넣기
-    if (myFishVal) {
-        let [mfName, mfSzStr] = myFishVal.split(':');
-        let mfSz = parseInt(mfSzStr);
-        let mySizes = fishingData.fish_inventory[mfName];
-        if (mySizes) {
-            let idx = mySizes.indexOf(mfSz);
-            if (idx > -1) {
-                mySizes.splice(idx, 1);
-                if (mySizes.length === 0) delete fishingData.fish_inventory[mfName];
-
-                if (!senderInv[mfName]) senderInv[mfName] = [];
-                senderInv[mfName].push(mfSz);
-
-                let baseF = FISH_DATABASE.find(f => f.name === mfName);
-                let recordGrade = baseF ? baseF.grade : '일반';
-                let senderRec = senderRow.fish_records || {};
-                if (!senderRec[mfName]) {
-                    senderRec[mfName] = { grade: recordGrade, maxSize: mfSz };
-                } else if (mfSz > senderRec[mfName].maxSize) {
-                    senderRec[mfName].maxSize = mfSz;
-                }
-                senderRow.fish_records = senderRec;
-            }
-        }
-    }
-
-    // 3. 자금 교환 반영
-    senderRow.money = (senderRow.money || 0) + myMoneyVal - senderMoneyVal;
-    fishingData.money = fishingData.money - myMoneyVal + senderMoneyVal;
+    // 2. 자금 교환 반영 (받고 주는 금액 처리)
+    senderRow.money = (senderRow.money || 0) - senderMoneyVal;
+    fishingData.money = fishingData.money + senderMoneyVal;
 
     // 상대방 데이터 업데이트 및 거래 제안 초기화
     await supabaseClient.from('user_fishing_data').update({
