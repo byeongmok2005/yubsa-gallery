@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (window 전역 바인딩 및 다곤 계약 완벽 해결 최종본)
+// fishing.js - 심해 낚시터 (다곤 상호 양방향 계약 및 실시간 공유 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -11,6 +11,7 @@ let fishingData = {
     makara_bonus_chance: 0,
     siren_streak: 0,
     dagon_partner: null,
+    is_dagon_mutual: false,
     trade_request: null
 };
 
@@ -85,7 +86,7 @@ const MYTHICAL_BEASTS = [
     { name: '인면어', color: '#be185d', bgGradient: 'linear-gradient(135deg, #fdf2f8, #fce7f3)', desc: '사람의 얼굴을 닮은 기괴한 물고기로, 야담 등에서 재앙을 예고하는 수중 생물입니다.', ability: '😈 특수 능력: 다른 플레이어에게 저주를 보내 10번의 낚시 동안 50% 확률로 쓰레기를 낚게 만듭니다.' },
     { name: '마카라', color: '#059669', bgGradient: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', desc: '코끼리나 악어의 머리에 물고기의 몸통과 꼬리를 지닌 신화 속 신성한 수수(水獸)입니다.', ability: '🌊 고유 영물 능력 (포식): 보관고에 있는 물고기를 삼켜 신화급 획득 확률을 높습니다. (일반 +0.01%, 희귀 +0.02%, 영웅 +0.05%, 전설 +0.1% / 신화 획득 시 초기화)' },
     { name: '마츠야', color: '#d97706', bgGradient: 'linear-gradient(135deg, #fffbeb, #fef3c7)', desc: '인류를 대홍수로부터 구하기 위해 최고신이 변신한 황금빛 뿔이 달린 거대한 물고기입니다.', ability: '🛡️ 고유 영물 (구원의 자비): 인면어의 저주나 시레인 크로인의 약탈 공격으로부터 자동으로 보호막을 쳐서 모든 피해를 완벽히 차단합니다!' },
-    { name: '다곤', color: '#78716c', bgGradient: 'linear-gradient(135deg, #fafaf9, #f5f5f4)', desc: '상반신은 인간, 하반신은 물고기 모양을 한 고대 블레셋인들의 풍요와 농경의 신입니다.', ability: '🤝 고유 영물 (풍요와 거래/계약): 현재 보유 중인 물고기와 소지금을 상대방과 1:1로 직접 비교 및 확인 후 교환할 수 있으며, 다곤 계약 파트너와 낚시 시 물고기가 복사됩니다!' },
+    { name: '다곤', color: '#78716c', bgGradient: 'linear-gradient(135deg, #fafaf9, #f5f5f4)', desc: '상반신은 인간, 하반신은 물고기 모양을 한 고대 블레셋인들의 풍요와 농경의 신입니다.', ability: '🤝 고유 영물 (풍요와 거래/상호 계약): 두 플레이어가 서로를 다곤 파트너로 상호 지목하여 연결되면, 어느 한쪽이 낚시할 때 물고기가 서로에게 실시간 복사됩니다!' },
     { name: '바하무트', color: '#b45309', bgGradient: 'linear-gradient(135deg, #fff7ed, #ffedd5)', desc: '전 세계의 무게를 떠받치고 있다고 전해지는, 끝을 알 수 없을 정도로 거대한 물고기입니다.', ability: '🌍 고유 영물 (대지의 지탱): 낚시 비용이 완전히 0원이 되며, 낚시터를 켜두는 동안 30초마다 자동으로 대어를 낚아 올립니다!' },
     { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없이 5초 안에 자동으로 대어를 잡아옵니다!' },
     { name: '익티오켄타우로스', color: '#7c3aed', bgGradient: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', desc: '상반신은 인간, 앞다리는 말, 뒷몸은 물고기 꼬리를 가진 신비로운 바다의 신들입니다.', ability: '👁️ 고유 영물 (심해의 지혜): 물고기 크기 10% 증가 보정과 함께, 미해금 영물들의 이름과 능력을 도감에서 미리 탐색하여 볼 수 있습니다!' },
@@ -109,6 +110,30 @@ function hasInventoryFish() {
         }
     }
     return false;
+}
+
+// 상호 다곤 계약 상태 확인 함수
+async function checkDagonMutualStatus() {
+    if (!currentUser || !fishingData.dagon_partner) {
+        fishingData.is_dagon_mutual = false;
+        return;
+    }
+
+    try {
+        const { data: partnerRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('dagon_partner')
+            .eq('nickname', fishingData.dagon_partner)
+            .maybeSingle();
+
+        if (partnerRow && partnerRow.dagon_partner === currentUser) {
+            fishingData.is_dagon_mutual = true;
+        } else {
+            fishingData.is_dagon_mutual = false;
+        }
+    } catch (e) {
+        fishingData.is_dagon_mutual = false;
+    }
 }
 
 async function initFishing() {
@@ -162,6 +187,7 @@ async function initFishing() {
             makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
             siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
             dagon_partner: data.dagon_partner || null,
+            is_dagon_mutual: false,
             trade_request: data.trade_request || null
         };
     } else {
@@ -179,9 +205,11 @@ async function initFishing() {
             dagon_partner: null,
             trade_request: null
         }]);
-        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, trade_request: null };
+        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null };
     }
     hasUsedChance = false;
+
+    await checkDagonMutualStatus();
 
     startBahamutAutoFishing();
     startTradePolling();
@@ -225,6 +253,14 @@ function startTradePolling() {
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
+        // 상호 다곤 계약 상태 실시간 확인
+        let oldMutual = fishingData.is_dagon_mutual;
+        await checkDagonMutualStatus();
+        if (oldMutual !== fishingData.is_dagon_mutual) {
+            let contentArea = document.getElementById("contentArea");
+            if (contentArea) renderFishingView(contentArea);
+        }
+
         const { data: myRow } = await supabaseClient
             .from('user_fishing_data')
             .select('fish_inventory, trade_request')
@@ -238,7 +274,7 @@ function startTradePolling() {
                 fishingData.fish_inventory = myRow.fish_inventory || {};
                 let contentArea = document.getElementById("contentArea");
                 if (contentArea) renderFishingView(contentArea);
-                showFloatingAlert("📜 [다곤 계약] 파트너와 물고기가 실시간 공유되었습니다!");
+                showFloatingAlert("📜 [상호 다곤 계약] 파트너와 물고기가 실시간 공유되었습니다!");
             }
 
             if (myRow.trade_request && myRow.trade_request.target === currentUser) {
@@ -395,12 +431,15 @@ function showBeastDetail(beastName) {
                 </div>
             `;
         } else if (beastName === '다곤') {
-            let partnerDisplay = fishingData.dagon_partner ? `<b style="color: #16a34a;">${fishingData.dagon_partner}</b>` : `<b style="color: #dc2626;">없음 (미체결)</b>`;
+            let partnerDisplay = fishingData.dagon_partner ? `<b style="color: #78716c;">${fishingData.dagon_partner}</b>` : `<b style="color: #dc2626;">없음 (미체결)</b>`;
+            let mutualDisplay = fishingData.is_dagon_mutual ? `<span style="color: #16a34a; font-weight: 900;">(상호 연결됨 🟢)</span>` : `<span style="color: #d97706; font-weight: 700;">(상대방 수락 대기중 ⏳)</span>`;
+            if (!fishingData.dagon_partner) mutualDisplay = "";
+
             extraAction = `
                 <div style="margin-top: 12px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 0.85rem; color: #334155; margin-bottom: 8px;">📜 현재 다곤 계약 파트너: ${partnerDisplay}</div>
+                    <div style="font-size: 0.85rem; color: #334155; margin-bottom: 8px;">📜 파트너: ${partnerDisplay} ${mutualDisplay}</div>
                     <button onclick="openTradeModal()" style="width: 100%; background: #78716c; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-bottom: 8px;">💬 직거래 제안 보내기</button>
-                    <button onclick="openDagonContractModal()" style="width: 100%; background: #292524; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">📜 다곤 계약 관리</button>
+                    <button onclick="openDagonContractModal()" style="width: 100%; background: #292524; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">📜 다곤 상호 계약 관리</button>
                 </div>
             `;
         } else if (beastName === '시레인 크로인') {
@@ -448,10 +487,15 @@ function openDagonContractModal() {
     let contentHtml = "";
 
     if (currentPartner) {
+        let statusBadge = fishingData.is_dagon_mutual 
+            ? `<div style="color: #16a34a; font-weight: 900; margin-bottom: 12px;">🟢 상호 연결됨 (물고기 상호 공유 활성)</div>` 
+            : `<div style="color: #d97706; font-weight: 700; margin-bottom: 12px;">⏳ 상대방의 계약 지정을 기다리는 중...</div>`;
+
         contentHtml = `
             <div style="background: #f8fafc; border: 1px solid #78716c; border-radius: 10px; padding: 14px; margin-bottom: 14px; text-align: center;">
-                <div style="font-size: 0.9rem; font-weight: 800; color: #292524; margin-bottom: 8px;">📜 현재 유효한 다곤 계약</div>
-                <div style="font-size: 1rem; color: #0284c7; font-weight: 900; margin-bottom: 12px;">[ ${currentPartner} ] 님과 계약 중</div>
+                <div style="font-size: 0.9rem; font-weight: 800; color: #292524; margin-bottom: 6px;">📜 현재 다곤 계약 대상</div>
+                <div style="font-size: 1.05rem; color: #78716c; font-weight: 900; margin-bottom: 4px;">[ ${currentPartner} ]</div>
+                ${statusBadge}
                 <button onclick="cancelDagonContract()" style="width: 100%; background: #dc2626; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">계약 해제하기</button>
             </div>
         `;
@@ -459,12 +503,15 @@ function openDagonContractModal() {
         let playerOptionsHtml = playerList.map(p => `<option value="${p}">${p}</option>`).join('');
         contentHtml = `
             <div style="margin-bottom: 12px;">
-                <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">계약할 상대 플레이어 선택:</label>
+                <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">상호 계약할 상대 플레이어 선택:</label>
                 <select id="dagonTargetSelect" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px; font-weight: 700;">
                     ${playerOptionsHtml}
                 </select>
+                <div style="font-size: 0.75rem; color: #64748b; margin-top: 6px; line-height: 1.4;">
+                    ※ 상대방도 나를 다곤 파트너로 지정해야 계약이 연결되어 물고기가 공유됩니다.
+                </div>
             </div>
-            <button onclick="submitDagonContract()" style="width: 100%; background: #78716c; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">다곤 계약 맺기</button>
+            <button onclick="submitDagonContract()" style="width: 100%; background: #78716c; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">다곤 계약 신청</button>
         `;
     }
 
@@ -472,7 +519,7 @@ function openDagonContractModal() {
         <div id="dagonContractModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
             <div style="background: white; width: 95%; max-width: 400px; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; border-top: 6px solid #78716c;">
                 <h3 style="margin-top: 0; color: #78716c; font-size: 1.15rem; font-weight: 900; display: flex; justify-content: space-between; align-items: center;">
-                    <span>📜 다곤 계약 관리 센터</span>
+                    <span>📜 다곤 상호 계약 관리 센터</span>
                     <button onclick="document.getElementById('dagonContractModal').remove();" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b;">✕</button>
                 </h3>
                 ${contentHtml}
@@ -490,32 +537,11 @@ async function submitDagonContract() {
     if (!target) return;
 
     fishingData.dagon_partner = target;
+    await checkDagonMutualStatus();
     await saveFishingData();
 
-    try {
-        const { data: targetRow } = await supabaseClient.from('user_fishing_data').select('*').eq('nickname', target).maybeSingle();
-        if (targetRow) {
-            await supabaseClient.from('user_fishing_data').update({
-                dagon_partner: currentUser,
-                updated_at: new Date()
-            }).eq('nickname', target);
-        } else {
-            await supabaseClient.from('user_fishing_data').insert([{
-                nickname: target,
-                money: 1000,
-                rod_level: 1,
-                fish_records: {},
-                fish_inventory: {},
-                unlocked_beasts: [],
-                dagon_partner: currentUser
-            }]);
-        }
-    } catch (e) {
-        console.warn("다곤 계약 상대방 동기화 중 오류:", e);
-    }
-
     closeAllModals();
-    showFloatingAlert(`📜 [${target}] 님과 다곤 계약이 체결되었습니다!`);
+    showFloatingAlert(`📜 [${target}] 님에게 다곤 계약을 신청했습니다. (상대방도 나를 지목해야 연결됩니다)`);
 
     let currentScroll = window.scrollY;
     let contentArea = document.getElementById("contentArea");
@@ -524,21 +550,9 @@ async function submitDagonContract() {
 }
 
 async function cancelDagonContract() {
-    let oldPartner = fishingData.dagon_partner;
     fishingData.dagon_partner = null;
+    fishingData.is_dagon_mutual = false;
     await saveFishingData();
-
-    if (oldPartner) {
-        try {
-            const { data: targetRow } = await supabaseClient.from('user_fishing_data').select('*').eq('nickname', oldPartner).maybeSingle();
-            if (targetRow && targetRow.dagon_partner === currentUser) {
-                await supabaseClient.from('user_fishing_data').update({
-                    dagon_partner: null,
-                    updated_at: new Date()
-                }).eq('nickname', oldPartner);
-            }
-        } catch (e) {}
-    }
 
     closeAllModals();
     showFloatingAlert("❌ 다곤 계약이 해제되었습니다.");
@@ -561,11 +575,6 @@ function openTradeModal() {
     if (!playerList || playerList.length === 0) {
         playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용'];
     }
-
-    let incomingRequest = null;
-    try {
-        const { data: myRow } = supabaseClient ? supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle() : { data: null };
-    } catch (e) {}
 
     let contentHtml = "";
     let myInventoryOptions = `<option value="">(물고기 선택 안 함)</option>`;
@@ -914,11 +923,19 @@ async function renderFishingView(contentArea) {
 
     let dagonContractBanner = "";
     if (fishingData.dagon_partner) {
-        dagonContractBanner = `
-            <div style="background: #f8fafc; border: 1px solid #78716c; color: #292524; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                📜 [ ${fishingData.dagon_partner} ] 님과 다곤의 계약이 유효합니다.
-            </div>
-        `;
+        if (fishingData.is_dagon_mutual) {
+            dagonContractBanner = `
+                <div style="background: #f8fafc; border: 1px solid #78716c; color: #292524; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    📜 [ ${fishingData.dagon_partner} ] 님과 상호 다곤 계약이 유효합니다. (실시간 물고기 공유 중)
+                </div>
+            `;
+        } else {
+            dagonContractBanner = `
+                <div style="background: #fffbeb; border: 1px solid #d97706; color: #92400e; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    ⏳ [ ${fishingData.dagon_partner} ] 님에게 계약을 신청함 (상대방도 나를 지목해야 연결됩니다)
+                </div>
+            `;
+        }
     }
 
     let hasBahamut = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('바하무트');
@@ -978,8 +995,8 @@ async function renderFishingView(contentArea) {
                 }
                 
                 let finalPrice = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? calculatedPrice * 2 : calculatedPrice; 
-                let carpBadge = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? `<span style="color: #d97706; font-size: 0.7rem; font-weight: 800; background: #fef3c7; padding: 2px 5px; border-radius: 4px; margin-left: 4px;">✨등용문 2배</span>` : ``;
-                let dagonBadge = isDagonItem ? `<span style="color: #0284c7; font-size: 0.7rem; font-weight: 800; background: #e0f2fe; padding: 2px 5px; border-radius: 4px; margin-left: 4px;">[다곤]</span>` : ``;
+                let carpBadge = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? `<span style="color: #d97706; font-size: 0.7rem; font-weight: 800; background: #fef3c7; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">✨등용문 2배</span>` : ``;
+                let dagonBadge = isDagonItem ? `<span style="color: #78716c; font-size: 0.7rem; font-weight: 800; background: #f5f5f4; border: 1px solid #d6d3d1; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">[다곤]</span>` : ``;
                 
                 inventoryHtml += `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
@@ -1285,7 +1302,8 @@ function executeCatchLogic() {
 
     saveFishingData();
 
-    if (fishingData.dagon_partner) {
+    // 🟢 상호 계약이 연결된 파트너에게만 물고기 실시간 복사 (양방향 모두 서로를 지정했을 때만 작동)
+    if (fishingData.dagon_partner && fishingData.is_dagon_mutual) {
         let partnerName = fishingData.dagon_partner;
         supabaseClient.from('user_fishing_data').select('*').eq('nickname', partnerName).maybeSingle().then(async ({ data: partnerRow }) => {
             if (partnerRow && partnerRow.dagon_partner === currentUser) {
