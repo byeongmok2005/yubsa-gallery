@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (Supabase 컬럼 에러 해결 및 직거래 실시간 팝업/청소 최종 완성본)
+// fishing.js - 심해 낚시터 (직거래 승인 후 잔류 팝업 완벽 해결 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -22,7 +22,7 @@ let biteTimer = null;
 let floatingAlertText = ""; 
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
 let hasUsedChance = false;
-let bahamutAutoActive = true; // 브라우저 로컬 상태로 분리하여 컬럼 에러 방지
+let bahamutAutoActive = true; 
 
 const ROD_TIERS = {
     1: { name: '🪵 나무 낚시대', price: 0, cost: 80 },
@@ -120,7 +120,6 @@ async function initFishing() {
 
     playerList = Array.from(fetchedPlayers).filter(n => n !== currentUser);
 
-    // 로컬 스토리지에서 바하무트 자동 사냥 상태 복원 (기본값 true)
     let savedBahamut = localStorage.getItem(`bahamut_auto_${currentUser}`);
     bahamutAutoActive = savedBahamut !== null ? JSON.parse(savedBahamut) : true;
 
@@ -183,7 +182,6 @@ async function saveFishingData() {
         }
     }
 
-    // DB 스키마 에러를 막기 위해 없는 컬럼은 절대 포함하지 않음
     const { error } = await supabaseClient.from('user_fishing_data').upsert([{
         nickname: currentUser,
         money: fishingData.money,
@@ -205,13 +203,13 @@ async function saveFishingData() {
     }
 }
 
-// 실시간 폴링 (거래 상태 자동 감지, 팝업 띄우기 및 잔류 요청 완벽 청소)
+// 실시간 폴링 (오직 'waiting' 상태일 때만 신규 팝업 자동 오픈)
 function startTradePolling() {
     if (tradePollingInterval) clearInterval(tradePollingInterval);
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
-        // 1. 나에게 온 제안이 있는지 확인하고, 있다면 자동으로 팝업 띄우기
+        // 1. 나에게 온 제안 중 'waiting' 상태인 것만 자동으로 팝업 오픈
         const { data: myRow } = await supabaseClient
             .from('user_fishing_data')
             .select('trade_request')
@@ -222,7 +220,6 @@ function startTradePolling() {
             let req = myRow.trade_request;
             if (req.status === 'waiting') {
                 let currentModal = document.getElementById('dmTradeModal');
-                // 아직 모달이 안 열려있다면 자동으로 제안 팝업 창 오픈
                 if (!currentModal) {
                     openTradeModal();
                 }
@@ -242,7 +239,6 @@ function startTradePolling() {
                         let myGotFish = tInfo.gaveFish ? tInfo.gaveFish.replace(':', ' (') + 'cm)' : '물고기 없음';
                         let myGotMoney = (tInfo.gaveMoney || 0).toLocaleString() + '원';
 
-                        // 상대방 DB와 내 DB 양쪽 모두 잔류 요청 싹 비우기
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
                         fishingData.trade_request = null;
                         await saveFishingData();
@@ -255,7 +251,6 @@ function startTradePolling() {
                         return;
                     } else if (req.status === 'rejected') {
                         let target = req.target;
-                        // 상대방 DB와 내 DB 양쪽 모두 잔류 요청 싹 비우기
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
                         fishingData.trade_request = null;
                         await saveFishingData();
@@ -328,7 +323,6 @@ async function toggleBahamutAuto() {
     let currentScroll = window.scrollY;
     bahamutAutoActive = !bahamutAutoActive;
     
-    // 브라우저 로컬 스토리지에 상태 저장
     localStorage.setItem(`bahamut_auto_${currentUser}`, JSON.stringify(bahamutAutoActive));
 
     let statusMsg = bahamutAutoActive ? "활성화 (30초마다 자동 낚시)" : "비활성화 (정지됨)";
@@ -419,7 +413,7 @@ function showBeastDetail(beastName) {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 
-// 다곤 직거래 제안 센터
+// 다곤 직거래 제안 센터 (상태에 따라 대기중 vs 진행중 분기 처리)
 async function openTradeModal() {
     let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
     if (!hasDagon) {
@@ -447,7 +441,7 @@ async function openTradeModal() {
 
     let contentHtml = "";
 
-    if (incomingRequest) {
+    if (incomingRequest && incomingRequest.status === 'waiting') {
         let senderName = incomingRequest.sender;
         let fishStr = incomingRequest.fishVal ? incomingRequest.fishVal.replace(':', ' (') + 'cm)' : '물고기 없음';
         let moneyStr = incomingRequest.moneyVal ? incomingRequest.moneyVal.toLocaleString() + '원' : '0원';
@@ -459,6 +453,15 @@ async function openTradeModal() {
                 <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #16a34a; font-weight: 700; margin-bottom: 10px;">보낸 소지금: <b>${moneyStr}</b></div>
                 <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-bottom: 6px;">🚪 직거래 방 입장 및 교환 승인</button>
                 <button onclick="rejectIncomingTrade()" style="width: 100%; background: #64748b; color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절하기</button>
+            </div>
+        `;
+    } else if (incomingRequest && incomingRequest.status === 'picking') {
+        let senderName = incomingRequest.sender;
+        contentHtml = `
+            <div style="background: #fefce8; border: 1px solid #fde047; border-radius: 10px; padding: 14px; margin-bottom: 14px; text-align: center;">
+                <div style="font-size: 0.85rem; font-weight: 800; color: #854d0e; margin-bottom: 8px;">✨ [직거래 진행 중]</div>
+                <div style="font-size: 0.8rem; color: #713f12; margin-bottom: 12px;">[${senderName}] 님과 이미 직거래를 수락하여 교환이 진행 중입니다.</div>
+                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #eab308; color: #713f12; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">🚪 교환소 방으로 돌아가기</button>
             </div>
         `;
     } else {
@@ -600,9 +603,11 @@ async function rejectIncomingTrade() {
     window.scrollTo(0, currentScroll);
 }
 
+// 승인 버튼을 누를 때 상대방 행과 내 행 모두 'picking'으로 업데이트하여 중복 팝업 원천 차단
 async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
     closeAllModals();
 
+    // 1. 상대방(보낸 사람) 행 상태를 'picking'으로 변경
     const { data: partnerRow } = await supabaseClient
         .from('user_fishing_data')
         .select('trade_request')
@@ -615,6 +620,21 @@ async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
             trade_request: partnerRow.trade_request,
             updated_at: new Date()
         }).eq('nickname', partnerName);
+    }
+
+    // 2. 내 자신(수신자) 행 상태도 'picking'으로 변경하여 대기 팝업이 다시 안 뜨게 처리
+    const { data: myRow } = await supabaseClient
+        .from('user_fishing_data')
+        .select('trade_request')
+        .eq('nickname', currentUser)
+        .maybeSingle();
+
+    if (myRow && myRow.trade_request) {
+        myRow.trade_request.status = 'picking';
+        await supabaseClient.from('user_fishing_data').update({
+            trade_request: myRow.trade_request,
+            updated_at: new Date()
+        }).eq('nickname', currentUser);
     }
 
     let myInventoryOptions = `<option value="">(내 보관고 물고기 선택)</option>`;
