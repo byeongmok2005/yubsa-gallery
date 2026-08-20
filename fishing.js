@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (알림 렌더링, 다곤 보유 검증, 타이밍 실패 알림 완성본)
+// fishing.js - 심해 낚시터 (다곤 보유 검증 방어 코드 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -132,19 +132,26 @@ function hasInventoryFish() {
 }
 
 async function checkDagonMutualStatus() {
-    if (!currentUser || !fishingData.dagon_partner) {
+    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+    if (!hasDagon || !currentUser || !fishingData.dagon_partner) {
         fishingData.is_dagon_mutual = false;
+        if (!hasDagon && fishingData.dagon_partner) {
+            fishingData.dagon_partner = null;
+            await saveFishingData();
+        }
         return;
     }
 
     try {
         const { data: partnerRow } = await supabaseClient
             .from('user_fishing_data')
-            .select('dagon_partner')
+            .select('dagon_partner, unlocked_beasts')
             .eq('nickname', fishingData.dagon_partner)
             .maybeSingle();
 
-        if (partnerRow && partnerRow.dagon_partner === currentUser) {
+        let partnerHasDagon = partnerRow && partnerRow.unlocked_beasts && partnerRow.unlocked_beasts.includes('다곤');
+
+        if (partnerHasDagon && partnerRow.dagon_partner === currentUser) {
             fishingData.is_dagon_mutual = true;
         } else {
             fishingData.is_dagon_mutual = false;
@@ -262,11 +269,14 @@ function startTradePolling() {
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
-        let oldMutual = fishingData.is_dagon_mutual;
-        await checkDagonMutualStatus();
-        if (oldMutual !== fishingData.is_dagon_mutual) {
-            let contentArea = document.getElementById("contentArea");
-            if (contentArea) renderFishingView(contentArea);
+        let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+        if (hasDagon) {
+            let oldMutual = fishingData.is_dagon_mutual;
+            await checkDagonMutualStatus();
+            if (oldMutual !== fishingData.is_dagon_mutual) {
+                let contentArea = document.getElementById("contentArea");
+                if (contentArea) renderFishingView(contentArea);
+            }
         }
 
         const { data: myRow } = await supabaseClient
@@ -276,13 +286,15 @@ function startTradePolling() {
             .maybeSingle();
 
         if (myRow) {
-            let remoteInvStr = JSON.stringify(myRow.fish_inventory || {});
-            let localInvStr = JSON.stringify(fishingData.fish_inventory || {});
-            if (remoteInvStr !== localInvStr) {
-                fishingData.fish_inventory = myRow.fish_inventory || {};
-                let contentArea = document.getElementById("contentArea");
-                if (contentArea) renderFishingView(contentArea);
-                showFloatingAlert("📜 [상호 다곤 계약] 파트너와 물고기가 실시간 공유되었습니다!");
+            if (hasDagon) {
+                let remoteInvStr = JSON.stringify(myRow.fish_inventory || {});
+                let localInvStr = JSON.stringify(fishingData.fish_inventory || {});
+                if (remoteInvStr !== localInvStr) {
+                    fishingData.fish_inventory = myRow.fish_inventory || {};
+                    let contentArea = document.getElementById("contentArea");
+                    if (contentArea) renderFishingView(contentArea);
+                    showFloatingAlert("📜 [상호 다곤 계약] 파트너와 물고기가 실시간 공유되었습니다!");
+                }
             }
 
             if (myRow.trade_request && myRow.trade_request.target === currentUser) {
@@ -492,6 +504,12 @@ function showBeastDetail(beastName) {
 }
 
 function openDagonContractModal() {
+    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+    if (!hasDagon) {
+        alert("다곤 영물을 보유하고 있어야 다곤 상호 계약을 관리할 수 있습니다!");
+        return;
+    }
+
     closeAllModals();
 
     if (!playerList || playerList.length === 0) {
@@ -1333,10 +1351,12 @@ function executeCatchLogic() {
 
     saveFishingData();
 
-    if (fishingData.dagon_partner && fishingData.is_dagon_mutual) {
+    // 🟢 다곤 보유 여부가 양쪽 다 확실할 때만 실시간 복사 실행
+    let hasMyDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+    if (hasMyDagon && fishingData.dagon_partner && fishingData.is_dagon_mutual) {
         let partnerName = fishingData.dagon_partner;
         supabaseClient.from('user_fishing_data').select('*').eq('nickname', partnerName).maybeSingle().then(async ({ data: partnerRow }) => {
-            if (partnerRow && partnerRow.dagon_partner === currentUser) {
+            if (partnerRow && partnerRow.unlocked_beasts && partnerRow.unlocked_beasts.includes('다곤') && partnerRow.dagon_partner === currentUser) {
                 let pInv = partnerRow.fish_inventory || {};
                 if (!pInv[fishName]) pInv[fishName] = [];
                 pInv[fishName].push({ size: fishSize, dagon: true });
