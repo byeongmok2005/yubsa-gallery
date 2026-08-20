@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (익티오 미보유 시 암호화 이름 표시 및 상호 다곤 계약 완성본)
+// fishing.js - 심해 낚시터 (알림 렌더링, 다곤 보유 검증, 타이밍 실패 알림 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -88,14 +88,13 @@ const MYTHICAL_BEASTS = [
     { name: '마츠야', color: '#d97706', bgGradient: 'linear-gradient(135deg, #fffbeb, #fef3c7)', desc: '인류를 대홍수로부터 구하기 위해 최고신이 변신한 황금빛 뿔이 달린 거대한 물고기입니다.', ability: '🛡️ 고유 영물 (구원의 자비): 인면어의 저주나 시레인 크로인의 약탈 공격으로부터 자동으로 보호막을 쳐서 모든 피해를 완벽히 차단합니다!' },
     { name: '다곤', color: '#78716c', bgGradient: 'linear-gradient(135deg, #fafaf9, #f5f5f4)', desc: '상반신은 인간, 하반신은 물고기 모양을 한 고대 블레셋인들의 풍요와 농경의 신입니다.', ability: '🤝 고유 영물 (풍요와 거래/상호 계약): 두 플레이어가 서로를 다곤 파트너로 상호 지목하여 연결되면, 어느 한쪽이 낚시할 때 물고기가 서로에게 실시간 복사됩니다!' },
     { name: '바하무트', color: '#b45309', bgGradient: 'linear-gradient(135deg, #fff7ed, #ffedd5)', desc: '전 세계의 무게를 떠받치고 있다고 전해지는, 끝을 알 수 없을 정도로 거대한 물고기입니다.', ability: '🌍 고유 영물 (대지의 지탱): 낚시 비용이 완전히 0원이 되며, 낚시터를 켜두는 동안 30초마다 자동으로 대어를 낚아 올립니다!' },
-    { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없이 5초 안에 자동으로 대어를 잡아옵니다!' },
+    { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
     { name: '익티오켄타우로스', color: '#7c3aed', bgGradient: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', desc: '상반신은 인간, 앞다리는 말, 뒷몸은 물고기 꼬리를 가진 신비로운 바다의 신들입니다.', ability: '👁️ 고유 영물 (심해의 지혜): 물고기 크기 10% 증가 보정과 함께, 미해금 영물들의 이름과 능력을 도감에서 미리 탐색하여 볼 수 있습니다!' },
     { name: '시레인 크로인', color: '#dc2626', bgGradient: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: '평소에는 은빛의 작은 물고기 형태를 하다가, 어부들을 유혹한 뒤 순식간에 고래마저 삼키는 영물입니다.', ability: '🔥 고유 영물 (심해의 약탈): 물고기를 잡을 때 일정 확률로 남의 최고 등급 물고기를 훔쳐 오며, 성공할 때마다 약탈 확률이 0.5%씩 영구 누적됩니다!' }
 ];
 
 const GRADE_PRIORITY = { '특수': 7, '영물': 6, '신화': 5, '전설': 4, '영웅': 3, '희귀': 2, '일반': 1 };
 
-// 🟢 영물 이름 크기와 길이에 맞춰 한글, 영어, 기호가 섞인 암호화 텍스트 생성 함수 (고정 해시 기반)
 function getObfuscatedName(name) {
     const pool = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789가나다라마바사아자차카타파하!@#$%^&*()_+~ㅇㄴfdDㅇ#';
     let hash = 0;
@@ -175,39 +174,48 @@ async function initFishing() {
     let savedBahamut = localStorage.getItem(`bahamut_auto_${currentUser}`);
     bahamutAutoActive = savedBahamut !== null ? JSON.parse(savedBahamut) : true;
 
-    let freshData = {
-        nickname: currentUser,
-        money: 1000,
-        rod_level: 1,
-        fish_records: {},
-        fish_inventory: {},
-        unlocked_beasts: [],
-        cursed_target: currentUser,
-        curse_remaining_count: 0,
-        makara_bonus_chance: 0,
-        siren_streak: 0,
-        dagon_partner: null,
-        trade_request: null,
-        updated_at: new Date()
-    };
+    const { data } = await supabaseClient
+        .from('user_fishing_data')
+        .select('*')
+        .eq('nickname', currentUser)
+        .maybeSingle();
 
-    await supabaseClient.from('user_fishing_data').upsert([freshData], { onConflict: 'nickname' });
+    if (data) {
+        let savedMoney = (data.money !== undefined && data.money >= 0) ? data.money : 1000;
+        let savedRod = (data.rod_level !== undefined && data.rod_level >= 1) ? data.rod_level : 1;
+        if (savedRod > 10) savedRod = 10;
 
-    fishingData = {
-        money: 1000,
-        rod_level: 1,
-        fish_records: {},
-        fish_inventory: {},
-        unlocked_beasts: [],
-        cursed_target: currentUser,
-        curse_remaining_count: 0,
-        makara_bonus_chance: 0,
-        siren_streak: 0,
-        dagon_partner: null,
-        is_dagon_mutual: false,
-        trade_request: null
-    };
-
+        fishingData = {
+            money: savedMoney,
+            rod_level: savedRod,
+            fish_records: data.fish_records || {},
+            fish_inventory: data.fish_inventory || {},
+            unlocked_beasts: data.unlocked_beasts || [],
+            cursed_target: data.cursed_target !== undefined ? data.cursed_target : currentUser,
+            curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
+            makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
+            siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
+            dagon_partner: data.dagon_partner || null,
+            is_dagon_mutual: false,
+            trade_request: data.trade_request || null
+        };
+    } else {
+        await supabaseClient.from('user_fishing_data').insert([{
+            nickname: currentUser,
+            money: 1000,
+            rod_level: 1,
+            fish_records: {},
+            fish_inventory: {},
+            unlocked_beasts: [],
+            cursed_target: currentUser,
+            curse_remaining_count: 0,
+            makara_bonus_chance: 0,
+            siren_streak: 0,
+            dagon_partner: null,
+            trade_request: null
+        }]);
+        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null };
+    }
     hasUsedChance = false;
 
     await checkDagonMutualStatus();
@@ -367,15 +375,15 @@ function startBahamutAutoFishing() {
 
 function showFloatingAlert(text) {
     floatingAlertText = text;
-    let alertBox = document.getElementById('floatingAlertBox');
-    if (alertBox) {
-        alertBox.innerText = floatingAlertText;
-        alertBox.style.display = 'block';
-    }
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+
     setTimeout(() => { 
-        floatingAlertText = ""; 
-        let box = document.getElementById('floatingAlertBox');
-        if (box) box.style.display = 'none';
+        if (floatingAlertText === text) {
+            floatingAlertText = ""; 
+            let box = document.getElementById('floatingAlertBox');
+            if (box) box.style.display = 'none';
+        }
     }, 3500);
 }
 
@@ -928,8 +936,9 @@ async function renderFishingView(contentArea) {
         }
     }
 
+    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
     let dagonContractBanner = "";
-    if (fishingData.dagon_partner) {
+    if (hasDagon && fishingData.dagon_partner) {
         if (fishingData.is_dagon_mutual) {
             dagonContractBanner = `
                 <div style="background: #f8fafc; border: 1px solid #78716c; color: #292524; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
@@ -1085,6 +1094,7 @@ async function renderFishingView(contentArea) {
     });
 
     let makaraCurrentBonus = (fishingData.makara_bonus_chance || 0).toFixed(2);
+    let alertBoxDisplay = floatingAlertText ? 'block' : 'none';
 
     contentArea.innerHTML = `
         <div class="card">
@@ -1114,7 +1124,7 @@ async function renderFishingView(contentArea) {
             </div>
 
             <div style="position: relative; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div id="floatingAlertBox" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 14px 24px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; z-index: 10; border: 2px solid #38bdf8;"></div>
+                <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 14px 24px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; z-index: 10; border: 2px solid #38bdf8;">${floatingAlertText}</div>
                 <div id="fishingStatusText" style="font-size: 1rem; font-weight: 700; color: ${statusColor}; margin-bottom: 14px; line-height: 1.4;">
                     ${statusText}
                 </div>
@@ -1198,6 +1208,7 @@ async function startCast() {
             biteTimer = setTimeout(() => {
                 if (fishingStep === 'bite') {
                     fishingStep = 'ready';
+                    showFloatingAlert("❌ 타이밍을 놓쳐 물고기가 도망쳤습니다!");
                     let contentArea = document.getElementById("contentArea");
                     if (contentArea) renderFishingView(contentArea);
                     window.scrollTo(0, currentScroll);
@@ -1214,6 +1225,7 @@ function earlyClickAlert() {
         clearTimeout(biteTimeout);
         clearTimeout(biteTimer);
         fishingStep = 'ready';
+        showFloatingAlert("❌ 낚싯대를 일찍 거두어 물고기가 도망쳤습니다.");
         let contentArea = document.getElementById("contentArea");
         if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
