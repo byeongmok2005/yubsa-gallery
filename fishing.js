@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (다곤 계약 공유 및 직거래, UI 고정 완성판)
+// fishing.js - 심해 낚시터 (메이플 스타일 1:1 교환 창 및 테스터 제한 완성판)
 
 let fishingData = { 
     money: 1000, 
@@ -96,7 +96,7 @@ const GRADE_PRIORITY = { '특수': 7, '영물': 6, '신화': 5, '전설': 4, '�
 async function initFishing() {
     if (!currentUser) return;
 
-    // 🔒 [테스트 단계] 허용된 관리자/테스터 계정 외 접근 차단
+    // 🔒 [테스트 단계] 박병목, 실험체 계정만 접근 허용
     const allowedTesters = ['박병목', '실험체'];
     if (!allowedTesters.includes(currentUser)) {
         alert("⚠️ 현재 낚시 시스템은 시험 운영 중입니다. 허용된 계정만 접근할 수 있습니다!");
@@ -124,7 +124,7 @@ async function initFishing() {
 
     playerList = Array.from(fetchedPlayers).filter(n => n !== currentUser);
     if (playerList.length === 0) {
-        playerList = ['실험체', '김철수', '김병수', '장민준', '손승환', '이승욱', '김태용'];
+        playerList = ['실험체', '박병목', '김철수', '장민준'];
     }
 
     const { data } = await supabaseClient
@@ -218,7 +218,7 @@ async function checkIncomingTradeRequests() {
 
     if (data && data.trade_request) {
         let req = data.trade_request;
-        showTradeConfirmationPopup(req.sender, req.fishVal, req.moneyVal);
+        showMapleTradeModal(req.sender, req.fishVal, req.moneyVal, true);
     }
 }
 
@@ -284,7 +284,7 @@ function showBeastDetail(beastName) {
             extraAction = `
                 <div style="margin-top: 12px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 8px; text-align: center;">
                     <div style="font-size: 0.85rem; color: #334155; margin-bottom: 8px;">📜 현재 다곤 계약 파트너: ${partnerDisplay}</div>
-                    <button onclick="openTradeModal()" style="width: 100%; background: #78716c; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer; margin-bottom: 6px;">🤝 플레이어 물고기/자금 직거래</button>
+                    <button onclick="openTradeModal()" style="width: 100%; background: #78716c; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer; margin-bottom: 6px;">🤝 메이플 스타일 1:1 교환 창 열기</button>
                     <button onclick="openDagonContractModal()" style="width: 100%; background: #292524; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer;">📜 다곤 계약 맺기</button>
                 </div>
             `;
@@ -333,6 +333,15 @@ function openTradeModal() {
     let existingModal = document.getElementById('beastModal');
     if (existingModal) existingModal.remove();
 
+    let playerOptions = playerList.map(p => `<option value="${p}">${p}</option>`).join('');
+
+    showMapleTradeModal('', '', 0, false, playerOptions);
+}
+
+function showMapleTradeModal(targetPlayerOrSender, incomingFish, incomingMoney, isIncoming = false, playerOptionsHtml = "") {
+    let existing = document.getElementById('mapleTradeModal');
+    if (existing) existing.remove();
+
     let myInventoryOptions = "";
     if (fishingData.fish_inventory) {
         for (let [fishName, sizes] of Object.entries(fishingData.fish_inventory)) {
@@ -345,53 +354,86 @@ function openTradeModal() {
     }
     if (!myInventoryOptions) myInventoryOptions = `<option value="">보관고에 물고기가 없습니다</option>`;
 
-    let playerOptions = playerList.map(p => `<option value="${p}">${p}</option>`).join('');
+    let targetPlayerName = targetPlayerOrSender;
+    let otherFishDesc = incomingFish ? incomingFish.replace(':', ' (') + 'cm)' : '등록된 물고기 없음';
+    let otherMoneyDesc = incomingMoney ? incomingMoney.toLocaleString() + '원' : '0원';
+
+    let optionsHtml = playerOptionsHtml || playerList.map(p => `<option value="${p}" ${p === targetPlayerName ? 'selected' : ''}>${p}</option>`).join('');
 
     let modalHtml = `
-        <div id="tradeModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000;">
-            <div style="background: white; width: 90%; max-width: 440px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: left; border-top: 6px solid #78716c;">
-                <h3 style="margin-top: 0; color: #78716c; font-size: 1.2rem; font-weight: 900;">🤝 다곤 양방향 안전 직거래</h3>
-                <p style="font-size: 0.85rem; color: #475569; margin-bottom: 14px;">상대방에게 직거래 제안을 보냅니다. <b>상대방이 접속하여 수락을 눌러야만 거래가 성립됩니다.</b></p>
+        <div id="mapleTradeModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
+            <div style="background: white; width: 95%; max-width: 480px; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; border-top: 6px solid #1e293b;">
+                <h3 style="margin-top: 0; color: #1e293b; font-size: 1.2rem; font-weight: 900; display: flex; justify-content: space-between; align-items: center;">
+                    <span>🤝 메이플 스타일 1:1 교환 창</span>
+                    <span style="font-size: 0.8rem; background: #e2e8f0; color: #475569; padding: 3px 8px; border-radius: 4px;">안전 거래</span>
+                </h3>
                 
-                <div style="margin-bottom: 10px;">
-                    <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">거래할 상대 플레이어:</label>
-                    <select id="tradeTargetPlayer" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px;">
-                        ${playerOptions}
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">거래 상대 플레이어:</label>
+                    <select id="mapleTarget" ${isIncoming ? 'disabled' : ''} style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px; font-weight: 700;">
+                        ${optionsHtml}
                     </select>
                 </div>
 
-                <div style="margin-bottom: 10px;">
-                    <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">내가 건낼 물고기 (보관고 선택):</label>
-                    <select id="tradeMyFish" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px;">
-                        <option value="">(물고기 없음)</option>
-                        ${myInventoryOptions}
-                    </select>
+                <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+                    <!-- 내 구역 -->
+                    <div style="flex: 1; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px;">
+                        <div style="font-size: 0.8rem; font-weight: 800; color: #0284c7; margin-bottom: 6px; text-align: center;">나의 올린 품목</div>
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 0.75rem; color: #64748b;">물고기 선택:</label>
+                            <select id="mapleMyFish" style="width: 100%; padding: 6px; font-size: 0.8rem; border-radius: 4px; border: 1px solid #cbd5e1; margin-top: 2px;">
+                                <option value="">(없음)</option>
+                                ${myInventoryOptions}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: #64748b;">소지금 (원):</label>
+                            <input type="number" id="mapleMyMoney" value="0" min="0" max="${fishingData.money}" style="width: 100%; padding: 6px; font-size: 0.8rem; border-radius: 4px; border: 1px solid #cbd5e1; margin-top: 2px; box-sizing: border-box;">
+                        </div>
+                    </div>
+
+                    <!-- 상대방 구역 -->
+                    <div style="flex: 1; background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 8px; padding: 10px;">
+                        <div style="font-size: 0.8rem; font-weight: 800; color: #be185d; margin-bottom: 6px; text-align: center;">[ ${targetPlayerName || '상대방'} ] 올린 품목</div>
+                        <div style="font-size: 0.85rem; color: #1e293b; background: white; padding: 8px; border-radius: 6px; border: 1px dashed #f472b6; margin-bottom: 6px; min-height: 36px;">
+                            🐟 <b>${otherFishDesc}</b>
+                        </div>
+                        <div style="font-size: 0.85rem; color: #1e293b; background: white; padding: 8px; border-radius: 6px; border: 1px dashed #f472b6; text-align: center;">
+                            💰 <b>${otherMoneyDesc}</b>
+                        </div>
+                    </div>
                 </div>
 
-                <div style="margin-bottom: 14px;">
-                    <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">내가 건낼 소지금 (원):</label>
-                    <input type="number" id="tradeMyMoney" value="0" min="0" max="${fishingData.money}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px; box-sizing: border-box;">
+                <div style="background: #fffbeb; border: 1px solid #fde047; padding: 8px 10px; border-radius: 6px; font-size: 0.78rem; color: #854d0e; margin-bottom: 14px; text-align: center;">
+                    💡 양측이 품목을 확인한 후 <b>[최종 수락]</b>을 눌러야 거래가 성립됩니다.
                 </div>
 
-                <button onclick="requestTrade()" style="width: 100%; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-bottom: 8px;">상대방에게 거래 제안 보내기</button>
-                <button onclick="document.getElementById('tradeModal').remove()" style="width: 100%; background: #64748b; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">닫기</button>
+                <div style="display: flex; gap: 8px;">
+                    ${isIncoming ? `
+                        <button onclick="executeMapleTrade('${targetPlayerName}')" style="flex: 1; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">최종 수락</button>
+                        <button onclick="cancelMapleTrade('${targetPlayerName}')" style="flex: 1; background: #dc2626; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절</button>
+                    ` : `
+                        <button onclick="sendMapleTradeRequest()" style="flex: 1; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">상대방에게 제안 보내기</button>
+                        <button onclick="document.getElementById('mapleTradeModal').remove()" style="flex: 1; background: #64748b; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">닫기</button>
+                    `}
+                </div>
             </div>
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 
-async function requestTrade() {
-    let target = document.getElementById('tradeTargetPlayer').value;
-    let fishVal = document.getElementById('tradeMyFish').value;
-    let moneyVal = parseInt(document.getElementById('tradeMyMoney').value) || 0;
+async function sendMapleTradeRequest() {
+    let target = document.getElementById('mapleTarget').value;
+    let fishVal = document.getElementById('mapleMyFish').value;
+    let moneyVal = parseInt(document.getElementById('mapleMyMoney').value) || 0;
 
     if (moneyVal > fishingData.money) {
-        alert("소지금이 부족합니다!");
+        alert("보유 소지금보다 많은 금액을 올릴 수 없습니다!");
         return;
     }
 
-    document.getElementById('tradeModal').remove();
+    document.getElementById('mapleTradeModal').remove();
 
     const { data: targetRow } = await supabaseClient
         .from('user_fishing_data')
@@ -404,56 +446,29 @@ async function requestTrade() {
         return;
     }
 
-    let targetDataJson = {
+    let tradeDataJson = {
         sender: currentUser,
         fishVal: fishVal,
         moneyVal: moneyVal
     };
 
     await supabaseClient.from('user_fishing_data').update({
-        trade_request: targetDataJson,
+        trade_request: tradeDataJson,
         updated_at: new Date()
     }).eq('nickname', target);
 
-    floatingAlertText = `🤝 [${target}] 님에게 직거래 제안을 전송했습니다. 상대 수락 대기 중...`;
+    floatingAlertText = `🤝 [${target}] 님에게 1:1 교환 제안을 전송했습니다. 상대방 수락 대기 중...`;
     renderFishingView(document.getElementById("contentArea"));
     setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 3000);
 }
 
-function showTradeConfirmationPopup(senderPlayer, fishVal, moneyVal) {
-    let existing = document.getElementById('tradeConfirmModal');
-    if (existing) existing.remove();
+async function executeMapleTrade(senderPlayer) {
+    let modal = document.getElementById('mapleTradeModal');
+    if (modal) modal.remove();
 
-    let fishDesc = fishVal ? fishVal.replace(':', ' (') + 'cm)' : '없음';
-
-    let popupHtml = `
-        <div id="tradeConfirmModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
-            <div style="background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); text-align: center; border-top: 6px solid #0284c7;">
-                <h3 style="margin-top: 0; color: #0284c7; font-size: 1.1rem; font-weight: 900;">🤝 [다곤 직거래 제안 도착]</h3>
-                <p style="font-size: 0.9rem; color: #334155; line-height: 1.5; margin: 14px 0;">
-                    <b>[${senderPlayer}]</b> 님이 직거래를 제안했습니다.<br>
-                    - 받는 항목: <b>${fishDesc} / ${moneyVal.toLocaleString()}원</b><br><br>
-                    수락 시 내 자금과 보관고에 반영됩니다.
-                </p>
-                <div style="display: flex; gap: 10px;">
-                    <button onclick="executeTrade('${senderPlayer}', '${fishVal}', ${moneyVal})" style="flex: 1; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">최종 수락</button>
-                    <button onclick="cancelTrade('${senderPlayer}')" style="flex: 1; background: #dc2626; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절</button>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', popupHtml);
-}
-
-async function executeTrade(senderPlayer, fishVal, moneyVal) {
-    document.getElementById('tradeConfirmModal').remove();
-
-    if (moneyVal > 0) {
-        if (fishingData.money < moneyVal) {
-            alert("거래에 필요한 소지금이 부족합니다!");
-            return;
-        }
-    }
+    // 내가 올리려던 값 가져오기
+    let myFishVal = document.getElementById('mapleMyFish') ? document.getElementById('mapleMyFish').value : '';
+    let myMoneyVal = 0; // 수락하는 측은 상대가 보낸 품목을 받는 동시에 기본 교환 성립
 
     const { data: senderRow } = await supabaseClient
         .from('user_fishing_data')
@@ -466,12 +481,21 @@ async function executeTrade(senderPlayer, fishVal, moneyVal) {
         return;
     }
 
+    let senderReq = senderRow.trade_request || {};
+    let senderFishVal = senderReq.fishVal || '';
+    let senderMoneyVal = senderReq.moneyVal || 0;
+
+    // 자금 검증
+    if (fishingData.money < myMoneyVal) {
+        alert("보유 소지금이 부족합니다!");
+        return;
+    }
+
+    // 1. 상대방 인벤토리에서 상대방이 올린 물고기 빼서 내게 넣기
     let senderInv = senderRow.fish_inventory || {};
-
-    if (fishVal) {
-        let [fName, fSzStr] = fishVal.split(':');
+    if (senderFishVal) {
+        let [fName, fSzStr] = senderFishVal.split(':');
         let fSz = parseInt(fSzStr);
-
         if (senderInv[fName]) {
             let idx = senderInv[fName].indexOf(fSz);
             if (idx > -1) {
@@ -481,10 +505,8 @@ async function executeTrade(senderPlayer, fishVal, moneyVal) {
                 if (!fishingData.fish_inventory[fName]) fishingData.fish_inventory[fName] = [];
                 fishingData.fish_inventory[fName].push(fSz);
 
-                let recordGrade = '일반';
                 let baseF = FISH_DATABASE.find(f => f.name === fName);
-                if (baseF) recordGrade = baseF.grade;
-
+                let recordGrade = baseF ? baseF.grade : '일반';
                 if (!fishingData.fish_records[fName]) {
                     fishingData.fish_records[fName] = { grade: recordGrade, maxSize: fSz };
                 } else if (fSz > fishingData.fish_records[fName].maxSize) {
@@ -494,30 +516,64 @@ async function executeTrade(senderPlayer, fishVal, moneyVal) {
         }
     }
 
-    senderRow.money = (senderRow.money || 0) + moneyVal;
-    fishingData.money -= moneyVal;
+    // 2. 내 인벤토리에서 내가 올린 물고기 빼서 상대방에게 넣기
+    if (myFishVal) {
+        let [mfName, mfSzStr] = myFishVal.split(':');
+        let mfSz = parseInt(mfSzStr);
+        let mySizes = fishingData.fish_inventory[mfName];
+        if (mySizes) {
+            let idx = mySizes.indexOf(mfSz);
+            if (idx > -1) {
+                mySizes.splice(idx, 1);
+                if (mySizes.length === 0) delete fishingData.fish_inventory[mfName];
 
+                if (!senderInv[mfName]) senderInv[mfName] = [];
+                senderInv[mfName].push(mfSz);
+
+                let baseF = FISH_DATABASE.find(f => f.name === mfName);
+                let recordGrade = baseF ? baseF.grade : '일반';
+                let senderRec = senderRow.fish_records || {};
+                if (!senderRec[mfName]) {
+                    senderRec[mfName] = { grade: recordGrade, maxSize: mfSz };
+                } else if (mfSz > senderRec[mfName].maxSize) {
+                    senderRec[mfName].maxSize = mfSz;
+                }
+                senderRow.fish_records = senderRec;
+            }
+        }
+    }
+
+    // 3. 자금 교환 반영
+    senderRow.money = (senderRow.money || 0) + myMoneyVal - senderMoneyVal;
+    fishingData.money = fishingData.money - myMoneyVal + senderMoneyVal;
+
+    // 상대방 데이터 업데이트 및 거래 제안 초기화
     await supabaseClient.from('user_fishing_data').update({
         fish_inventory: senderInv,
         money: senderRow.money,
+        fish_records: senderRow.fish_records,
         trade_request: null,
         updated_at: new Date()
     }).eq('nickname', senderPlayer);
 
+    // 내 데이터 저장
     await saveFishingData();
-    floatingAlertText = "🤝 다곤의 양방향 직거래가 완벽하게 체결되었습니다!";
+
+    floatingAlertText = "🤝 메이플 스타일 1:1 안전 교환이 완벽하게 체결되었습니다!";
     renderFishingView(document.getElementById("contentArea"));
     setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 2500);
 }
 
-async function cancelTrade(senderPlayer) {
-    document.getElementById('tradeConfirmModal').remove();
+async function cancelMapleTrade(senderPlayer) {
+    let modal = document.getElementById('mapleTradeModal');
+    if (modal) modal.remove();
+
     await supabaseClient.from('user_fishing_data').update({
         trade_request: null,
         updated_at: new Date()
     }).eq('nickname', currentUser);
 
-    floatingAlertText = "❌ 직거래 제안을 거절했습니다.";
+    floatingAlertText = "❌ 교환 제안을 거절했습니다.";
     renderFishingView(document.getElementById("contentArea"));
     setTimeout(() => { floatingAlertText = ""; renderFishingView(document.getElementById("contentArea")); }, 2500);
 }
@@ -1276,7 +1332,6 @@ async function executeCatchLogic() {
 
     await saveFishingData();
 
-    // 💡 다곤 계약 파트너가 있다면 파트너에게도 동일 물고기 복사 지급
     if (fishingData.dagon_partner) {
         let partnerName = fishingData.dagon_partner;
         const { data: partnerRow } = await supabaseClient
