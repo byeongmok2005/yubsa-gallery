@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (제안 보낸 사람 알림 동기화 및 바하무트 상태 저장 최종 완성본)
+// fishing.js - 심해 낚시터 (실시간 폴링 자동 감지 및 즉시 반영 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -17,6 +17,7 @@ let fishingData = {
 
 let fishingStep = 'ready'; 
 let autoFishingInterval = null; 
+let tradePollingInterval = null; // 실시간 폴링 타이머
 let biteTimeout = null;
 let biteTimer = null; 
 let floatingAlertText = ""; 
@@ -156,7 +157,6 @@ async function initFishing() {
             curse_remaining_count: 0,
             makara_bonus_chance: 0,
             siren_streak: 0,
-            bahamut_auto_active: true,
             dagon_partner: null,
             trade_request: null
         }]);
@@ -165,6 +165,7 @@ async function initFishing() {
     hasUsedChance = false;
 
     startBahamutAutoFishing();
+    startTradePolling(); // 실시간 제안 감지 폴링 시작
 }
 
 async function saveFishingData() {
@@ -199,6 +200,68 @@ async function saveFishingData() {
     if (error) {
         console.error("🚨 Supabase 낚시 데이터 저장 실패:", error.message);
     }
+}
+
+// 2초마다 백그라운드에서 제안 상태 변화 및 수신 여부를 자동 감지
+function startTradePolling() {
+    if (tradePollingInterval) clearInterval(tradePollingInterval);
+    tradePollingInterval = setInterval(async () => {
+        if (!currentUser) return;
+
+        // 1. 나에게 온 제안이 있는지 또는 내가 보낸 제안의 상태가 바뀌었는지 체크
+        const { data: myRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('trade_request')
+            .eq('nickname', currentUser)
+            .maybeSingle();
+
+        if (myRow && myRow.trade_request) {
+            let req = myRow.trade_request;
+            if (req.target === currentUser && req.status === 'waiting') {
+                // 새로운 제안이 도착함 -> 만약 직거래 모달이 안 열려있다면 안내 표시 가능
+                let banner = document.getElementById('tradeStatusBanner');
+                if (banner && !document.getElementById('dmTradeModal')) {
+                    banner.innerHTML = `📬 [${req.sender}]님으로부터 직거래 제안이 도착했습니다! (다곤 상세에서 확인)`;
+                }
+            }
+        }
+
+        // 2. 내가 보낸 제안의 상태 변화 감지 (상대방이 수락/거절/완료했는지)
+        const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
+        if (allRows) {
+            for (let row of allRows) {
+                if (row.trade_request && row.trade_request.sender === currentUser) {
+                    let req = row.trade_request;
+                    if (req.status === 'completed') {
+                        let tInfo = req;
+                        let myGaveFish = tInfo.gotFish ? tInfo.gotFish.replace(':', ' (') + 'cm)' : '물고기 없음';
+                        let myGaveMoney = (tInfo.gotMoney || 0).toLocaleString() + '원';
+                        let myGotFish = tInfo.gaveFish ? tInfo.gaveFish.replace(':', ' (') + 'cm)' : '물고기 없음';
+                        let myGotMoney = (tInfo.gaveMoney || 0).toLocaleString() + '원';
+
+                        await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        await initFishing();
+                        
+                        let contentArea = document.getElementById("contentArea");
+                        if (contentArea) renderFishingView(contentArea);
+
+                        alert(`🎉 [직거래 성사 완료]\n\n📤 [내가 준 품목]\n- 물고기: ${myGaveFish}\n- 소지금: ${myGaveMoney}\n\n📥 [내가 받은 품목]\n- 물고기: ${myGotFish}\n- 소지금: ${myGotMoney}`);
+                        return;
+                    } else if (req.status === 'rejected') {
+                        let target = req.target;
+                        await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        await initFishing();
+
+                        let contentArea = document.getElementById("contentArea");
+                        if (contentArea) renderFishingView(contentArea);
+
+                        alert(`❌ [${target}] 님께서 직거래 제안을 거절했습니다.`);
+                        return;
+                    }
+                }
+            }
+        }
+    }, 2000);
 }
 
 function startBahamutAutoFishing() {
@@ -239,7 +302,8 @@ async function toggleBahamutAuto() {
     closeAllModals();
     showBeastDetail('바하무트');
 
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -359,7 +423,7 @@ async function openTradeModal() {
                 <div style="font-size: 0.85rem; font-weight: 800; color: #be185d; margin-bottom: 8px; text-align: center;">📬 [${senderName}] 님으로부터 제안이 도착했습니다!</div>
                 <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #334155; margin-bottom: 4px;">보낸 물고기: <b>${fishStr}</b></div>
                 <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #16a34a; font-weight: 700; margin-bottom: 10px;">보낸 소지금: <b>${moneyStr}</b></div>
-                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 900; font-weight: 900; cursor: pointer; margin-bottom: 6px;">🚪 직거래 방 입장 및 교환 승인</button>
+                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-bottom: 6px;">🚪 직거래 방 입장 및 교환 승인</button>
                 <button onclick="rejectIncomingTrade()" style="width: 100%; background: #64748b; color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절하기</button>
             </div>
         `;
@@ -446,11 +510,11 @@ async function sendDmTradeRequest() {
         updated_at: new Date()
     }).eq('nickname', target);
 
-    alert(`[${target}]님에게 직거래 제안을 전송했습니다. 메인 화면에서 대기 배너가 표시됩니다.`);
     closeAllModals();
 
     let currentScroll = window.scrollY;
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -467,14 +531,13 @@ async function cancelMyTradeRequest() {
         });
     }
 
-    alert("직거래 제안이 취소되었습니다.");
     let currentScroll = window.scrollY;
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
 async function rejectIncomingTrade() {
-    // 상대방(sender)에게 거절 상태를 알리기 위해 trade_request에 status: 'rejected' 기록
     const { data: myRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle();
     if (myRow && myRow.trade_request) {
         let senderName = myRow.trade_request.sender;
@@ -641,11 +704,10 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     }
 
     // 3. 소지금 스왑
-    let oldMyMoney = fishingData.money;
     fishingData.money = fishingData.money - mySendMoney + partnerMoney;
     partnerRow.money = (partnerRow.money || 0) - partnerMoney + mySendMoney;
 
-    // 4. DB 반영 (상대방 DB에 trade_request를 'completed' 상태와 주고받은 내역 기록하여 제안 보낸 사람도 감지하게 함)
+    // 4. DB 반영
     let completedTradeInfo = {
         status: 'completed',
         sender: partnerName,
@@ -674,14 +736,15 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     let gotFishStr = partnerFish ? partnerFish.replace(':', ' (') + 'cm)' : '물고기 없음';
     let gotMoneyStr = partnerMoney.toLocaleString() + '원';
 
-    alert(`🎉 직거래 교환 완료!\n\n📤 [내가 준 품목]\n- 물고기: ${gaveFishStr}\n- 소지금: ${gaveMoneyStr}\n\n📥 [내가 받은 품목]\n- 물고기: ${gotFishStr}\n- 소지금: ${gotMoneyStr}`);
-
     let currentScroll = window.scrollY;
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
+
+    alert(`🎉 직거래 교환 완료!\n\n📤 [내가 준 품목]\n- 물고기: ${gaveFishStr}\n- 소지금: ${gaveMoneyStr}\n\n📥 [내가 받은 품목]\n- 물고기: ${gotFishStr}\n- 소지금: ${gotMoneyStr}`);
 }
 
-// 낚시터 렌더링 뷰 (제안 보낸 사람의 완료/거절/대기 상태 감지 배너 포함)
+// 낚시터 렌더링 뷰
 async function renderFishingView(contentArea) {
     let currentRod = ROD_TIERS[fishingData.rod_level];
     let nextRod = ROD_TIERS[fishingData.rod_level + 1];
@@ -695,32 +758,11 @@ async function renderFishingView(contentArea) {
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
             for (let row of allRows) {
-                // 내가 제안을 보낸 경우 (상대방 DB에 내 이름이 sender로 등록됨)
                 if (row.trade_request && row.trade_request.sender === currentUser) {
                     let target = row.trade_request.target;
                     let reqStatus = row.trade_request.status;
 
-                    if (reqStatus === 'completed') {
-                        // 거래가 완료됨! 제안 보낸 사람도 무엇을 주고받았는지 확인 가능
-                        let tInfo = row.trade_request;
-                        let myGaveFish = tInfo.gotFish ? tInfo.gotFish.replace(':', ' (') + 'cm)' : '물고기 없음';
-                        let myGaveMoney = (tInfo.gotMoney || 0).toLocaleString() + '원';
-                        let myGotFish = tInfo.gaveFish ? tInfo.gaveFish.replace(':', ' (') + 'cm)' : '물고기 없음';
-                        let myGotMoney = (tInfo.gaveMoney || 0).toLocaleString() + '원';
-
-                        // 팝업 한 번 띄워주고 데이터 정리
-                        alert(`🎉 [직거래 성사 완료]\n\n📤 [내가 준 품목]\n- 물고기: ${myGaveFish}\n- 소지금: ${myGaveMoney}\n\n📥 [내가 받은 품목]\n- 물고기: ${myGotFish}\n- 소지금: ${myGotMoney}`);
-                        
-                        // 내 인벤토리/자금 갱신을 위해 데이터 재조회 후 제안 초기화
-                        await initFishing();
-                        await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
-                        return;
-                    } else if (reqStatus === 'rejected') {
-                        alert(`❌ [${target}] 님께서 직거래 제안을 거절했습니다.`);
-                        await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
-                        await initFishing();
-                        return;
-                    } else if (reqStatus === 'picking') {
+                    if (reqStatus === 'picking') {
                         tradeStatusBanner = `
                             <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
                                 ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
@@ -729,7 +771,7 @@ async function renderFishingView(contentArea) {
                     } else {
                         tradeStatusBanner = `
                             <div style="background: #eff6ff; border: 2px solid #3b82f6; color: #1d4ed8; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center; display: flex; justify-content: space-between; align-items: center;">
-                                <span>⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
+                                <span id="tradeStatusBanner">⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
                                 <button onclick="cancelMyTradeRequest()" style="background: #dc2626; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">취소</button>
                             </div>
                         `;
@@ -973,7 +1015,8 @@ async function startCast() {
     if (hasHippocampus) {
         fishingStep = 'waiting';
         statusText = "⚡ [히포캠포스] 파도를 가르며 대어를 낚아채는 중...";
-        renderFishingView(document.getElementById("contentArea"));
+        let contentArea = document.getElementById("contentArea");
+        if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
 
         setTimeout(() => {
@@ -981,26 +1024,30 @@ async function startCast() {
                 let caught = executeCatchLogic();
                 showFloatingAlert(`🎣 [히포캠포스] 대어 낚시 성공! 🐟 ${caught.name} (${caught.size}cm)`);
                 fishingStep = 'ready';
-                renderFishingView(document.getElementById("contentArea"));
+                let contentArea = document.getElementById("contentArea");
+                if (contentArea) renderFishingView(contentArea);
                 window.scrollTo(0, currentScroll);
             }
         }, 5000);
     } else {
         fishingStep = 'waiting';
-        renderFishingView(document.getElementById("contentArea"));
+        let contentArea = document.getElementById("contentArea");
+        if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
 
         let waitTime = Math.random() * 2500 + 1500;
         biteTimeout = setTimeout(() => {
             if (fishingStep !== 'waiting') return;
             fishingStep = 'bite';
-            renderFishingView(document.getElementById("contentArea"));
+            let contentArea = document.getElementById("contentArea");
+            if (contentArea) renderFishingView(contentArea);
             window.scrollTo(0, currentScroll);
 
             biteTimer = setTimeout(() => {
                 if (fishingStep === 'bite') {
                     fishingStep = 'ready';
-                    renderFishingView(document.getElementById("contentArea"));
+                    let contentArea = document.getElementById("contentArea");
+                    if (contentArea) renderFishingView(contentArea);
                     window.scrollTo(0, currentScroll);
                 }
             }, 750);
@@ -1015,7 +1062,8 @@ function earlyClickAlert() {
         clearTimeout(biteTimeout);
         clearTimeout(biteTimer);
         fishingStep = 'ready';
-        renderFishingView(document.getElementById("contentArea"));
+        let contentArea = document.getElementById("contentArea");
+        if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
     }
 }
@@ -1076,7 +1124,8 @@ async function hookFish() {
             await saveFishingData();
 
             showTrashPopup(trashMsg);
-            renderFishingView(document.getElementById("contentArea"));
+            let contentArea = document.getElementById("contentArea");
+            if (contentArea) renderFishingView(contentArea);
             window.scrollTo(0, currentScroll);
             return;
         }
@@ -1095,7 +1144,8 @@ async function hookFish() {
     showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${caught.size}cm)을(를) 낚았습니다!`);
     
     fishingStep = 'ready';
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -1207,7 +1257,7 @@ function alertToDefenderMatsuya(targetPlayer) {
                 <span style="font-size: 0.95rem; color: #fef08a; font-weight: 500; margin-top: 8px; display: inline-block; line-height: 1.4;">
                     [${targetPlayer}] 님이 마츠야의 구원 보호막을 보유하고 있어, 시레인 크로인의 약탈 공격이 차단되었습니다! 물고기를 뺏어오지 못했습니다.
                 </span>
-                <button onclick="let currentScroll=window.scrollY; document.getElementById('defenderMatsuyaBox').remove(); executeCatchLogic(); renderFishingView(document.getElementById('contentArea')); window.scrollTo(0, currentScroll);" style="width: 100%; margin-top: 16px; background: #d97706; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">확인 (일반 낚시 진행)</button>
+                <button onclick="let currentScroll=window.scrollY; document.getElementById('defenderMatsuyaBox').remove(); executeCatchLogic(); let contentArea = document.getElementById('contentArea'); if (contentArea) renderFishingView(contentArea); window.scrollTo(0, currentScroll);" style="width: 100%; margin-top: 16px; background: #d97706; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">확인 (일반 낚시 진행)</button>
             </div>
         </div>
     `;
@@ -1222,7 +1272,8 @@ async function confirmSirenStealFromRecord(targetPlayer, fishName, fishSize, fis
     if (!targetPlayer || !fishName) {
         alert("뺏어올 물고기가 없습니다. 일반 낚시를 진행합니다.");
         executeCatchLogic();
-        renderFishingView(document.getElementById("contentArea"));
+        let contentArea = document.getElementById("contentArea");
+        if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
         return;
     }
@@ -1261,7 +1312,8 @@ async function confirmSirenStealFromRecord(targetPlayer, fishName, fishSize, fis
     await saveFishingData();
 
     showSirenPopup(`🔥 시레인 크로인이 [${targetPlayer}] 님의 도감 대어 [${fishName}](${fishSize}cm)를 완벽하게 강탈하여 내 보관고에 넣었습니다!<br>(상대방 도감에서는 해당 물고기가 소멸했습니다)`);
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -1271,7 +1323,8 @@ function confirmNormalCatch() {
     if (modal) modal.remove();
     let caught = executeCatchLogic();
     showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${caught.size}cm)`);
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -1407,7 +1460,8 @@ async function feedMakara(fishName, index) {
 
     await saveFishingData();
 
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -1442,7 +1496,8 @@ async function sellFish(fishName, index) {
     fishingData.money += sellPrice;
     await saveFishingData();
     
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
 
@@ -1461,6 +1516,7 @@ async function upgradeRod() {
     fishingData.rod_level = nextLevel;
     await saveFishingData();
     
-    renderFishingView(document.getElementById("contentArea"));
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
