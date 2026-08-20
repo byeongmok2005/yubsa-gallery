@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (다곤 보유 검증 방어 코드 완성본)
+// fishing.js - 심해 낚시터 (영물 0.01% 낚시 및 중복 방지 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -1306,6 +1306,18 @@ async function hookFish() {
 }
 
 function executeCatchLogic() {
+    // 🟢 영물 낚시 체크 (모든 낚싯대 공통, 미해금 영물 각각 0.01% 확률, 중복 등장 없음)
+    let unobtainedBeasts = MYTHICAL_BEASTS.filter(b => !fishingData.unlocked_beasts.includes(b.name));
+    for (let beast of unobtainedBeasts) {
+        if (Math.random() * 100 < 0.01) {
+            if (!fishingData.unlocked_beasts) fishingData.unlocked_beasts = [];
+            fishingData.unlocked_beasts.push(beast.name);
+            saveFishingData();
+            showFloatingAlert(`✨🏛️ [전설의 영물 발견!] 신비로운 수호신 "${beast.name}"을(를) 낚아 올렸습니다!`);
+            break; // 한 번에 하나의 영물만 획득
+        }
+    }
+
     let rand = Math.random() * 100;
     let rodLevel = fishingData.rod_level;
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
