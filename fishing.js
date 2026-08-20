@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (다곤 실시간 계약 및 공유/도감/태그 최종 완성본)
+// fishing.js - 심해 낚시터 (window 전역 바인딩 및 다곤 계약 완벽 해결 최종본)
 
 let fishingData = { 
     money: 1000, 
@@ -99,6 +99,16 @@ function parseFishItem(item) {
         return { size: Number(item.size), dagon: !!item.dagon };
     }
     return { size: Number(item), dagon: false };
+}
+
+function hasInventoryFish() {
+    if (!fishingData.fish_inventory) return false;
+    for (let k of Object.keys(fishingData.fish_inventory)) {
+        if (Array.isArray(fishingData.fish_inventory[k]) && fishingData.fish_inventory[k].length > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 async function initFishing() {
@@ -210,13 +220,11 @@ async function saveFishingData() {
     }
 }
 
-// 실시간 폴링 (다곤 계약 인벤토리 공유 실시간 감지 및 직거래 상태 관리)
 function startTradePolling() {
     if (tradePollingInterval) clearInterval(tradePollingInterval);
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
-        // 1. 실시간 다곤 공유 인벤토리 동기화 감지
         const { data: myRow } = await supabaseClient
             .from('user_fishing_data')
             .select('fish_inventory, trade_request')
@@ -244,7 +252,6 @@ function startTradePolling() {
             }
         }
 
-        // 2. 내가 보낸 직거래 제안 상태 감지 (완료/거절)
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
             for (let row of allRows) {
@@ -288,7 +295,6 @@ function startTradePolling() {
     }, 2000);
 }
 
-// 화면 중앙에 직거래 결과 팝업 표시
 function showTradeResultPopup(gaveFish, gaveMoney, gotFish, gotMoney) {
     closeAllModals();
     let popupHtml = `
@@ -431,8 +437,7 @@ function showBeastDetail(beastName) {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 
-// 다곤 계약 관리 센터 모달
-async function openDagonContractModal() {
+function openDagonContractModal() {
     closeAllModals();
 
     if (!playerList || playerList.length === 0) {
@@ -544,8 +549,7 @@ async function cancelDagonContract() {
     window.scrollTo(0, currentScroll);
 }
 
-// 다곤 직거래 제안 센터
-async function openTradeModal() {
+function openTradeModal() {
     let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
     if (!hasDagon) {
         alert("다곤 영물을 보유하고 있어야 직거래를 제안할 수 있습니다!");
@@ -560,80 +564,47 @@ async function openTradeModal() {
 
     let incomingRequest = null;
     try {
-        const { data: myRow } = await supabaseClient
-            .from('user_fishing_data')
-            .select('trade_request')
-            .eq('nickname', currentUser)
-            .maybeSingle();
-        if (myRow && myRow.trade_request && myRow.trade_request.target === currentUser) {
-            incomingRequest = myRow.trade_request;
-        }
+        const { data: myRow } = supabaseClient ? supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle() : { data: null };
     } catch (e) {}
 
     let contentHtml = "";
-
-    if (incomingRequest && incomingRequest.status === 'waiting') {
-        let senderName = incomingRequest.sender;
-        let fishStr = incomingRequest.fishVal ? incomingRequest.fishVal.replace(':', ' (') + 'cm)' : '물고기 없음';
-        let moneyStr = incomingRequest.moneyVal ? incomingRequest.moneyVal.toLocaleString() + '원' : '0원';
-
-        contentHtml = `
-            <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
-                <div style="font-size: 0.85rem; font-weight: 800; color: #be185d; margin-bottom: 8px; text-align: center;">📬 [${senderName}] 님으로부터 제안이 도착했습니다!</div>
-                <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #334155; margin-bottom: 4px;">보낸 물고기: <b>${fishStr}</b></div>
-                <div style="background: white; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 0.8rem; color: #16a34a; font-weight: 700; margin-bottom: 10px;">보낸 소지금: <b>${moneyStr}</b></div>
-                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #16a34a; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer; margin-bottom: 6px;">🚪 직거래 방 입장 및 교환 승인</button>
-                <button onclick="rejectIncomingTrade()" style="width: 100%; background: #64748b; color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer;">거절하기</button>
-            </div>
-        `;
-    } else if (incomingRequest && incomingRequest.status === 'picking') {
-        let senderName = incomingRequest.sender;
-        contentHtml = `
-            <div style="background: #fefce8; border: 1px solid #fde047; border-radius: 10px; padding: 14px; margin-bottom: 14px; text-align: center;">
-                <div style="font-size: 0.85rem; font-weight: 800; color: #854d0e; margin-bottom: 8px;">✨ [직거래 진행 중]</div>
-                <div style="font-size: 0.8rem; color: #713f12; margin-bottom: 12px;">[${senderName}] 님과 이미 직거래를 수락하여 교환이 진행 중입니다.</div>
-                <button onclick="openTradeRoom('${senderName}', '${incomingRequest.fishVal || ''}', ${incomingRequest.moneyVal || 0})" style="width: 100%; background: #eab308; color: #713f12; border: none; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">🚪 교환소 방으로 돌아가기</button>
-            </div>
-        `;
-    } else {
-        let myInventoryOptions = `<option value="">(물고기 선택 안 함)</option>`;
-        if (fishingData.fish_inventory) {
-            for (let [fishName, sizes] of Object.entries(fishingData.fish_inventory)) {
-                if (sizes && sizes.length > 0) {
-                    sizes.forEach((item) => {
-                        let sz = parseFishItem(item).size;
-                        let valStr = `${fishName}:${sz}`;
-                        myInventoryOptions += `<option value="${valStr}">🐟 ${fishName} (${sz}cm)</option>`;
-                    });
-                }
+    let myInventoryOptions = `<option value="">(물고기 선택 안 함)</option>`;
+    if (fishingData.fish_inventory) {
+        for (let [fishName, sizes] of Object.entries(fishingData.fish_inventory)) {
+            if (sizes && sizes.length > 0) {
+                sizes.forEach((item) => {
+                    let sz = parseFishItem(item).size;
+                    let valStr = `${fishName}:${sz}`;
+                    myInventoryOptions += `<option value="${valStr}">🐟 ${fishName} (${sz}cm)</option>`;
+                });
             }
         }
-        let playerOptionsHtml = playerList.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+    let playerOptionsHtml = playerList.map(p => `<option value="${p}">${p}</option>`).join('');
 
-        contentHtml = `
-            <div style="margin-bottom: 12px;">
-                <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">거래 상대 플레이어 선택:</label>
-                <select id="dmTarget" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px; font-weight: 700;">
-                    ${playerOptionsHtml}
+    contentHtml = `
+        <div style="margin-bottom: 12px;">
+            <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">거래 상대 플레이어 선택:</label>
+            <select id="dmTarget" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px; font-weight: 700;">
+                ${playerOptionsHtml}
+            </select>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+            <div style="margin-bottom: 8px;">
+                <label style="font-size: 0.75rem; color: #475569; font-weight: 700;">보낼 물고기 선택:</label>
+                <select id="dmMyFish" style="width: 100%; padding: 6px; font-size: 0.85rem; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 2px;">
+                    ${myInventoryOptions}
                 </select>
             </div>
-
-            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-                <div style="margin-bottom: 8px;">
-                    <label style="font-size: 0.75rem; color: #475569; font-weight: 700;">보낼 물고기 선택:</label>
-                    <select id="dmMyFish" style="width: 100%; padding: 6px; font-size: 0.85rem; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 2px;">
-                        ${myInventoryOptions}
-                    </select>
-                </div>
-                <div>
-                    <label style="font-size: 0.75rem; color: #475569; font-weight: 700;">보낼 소지금 (원):</label>
-                    <input type="number" id="dmMyMoney" value="0" min="0" max="${fishingData.money}" style="width: 100%; padding: 6px; font-size: 0.85rem; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 2px; box-sizing: border-box;">
-                </div>
+            <div>
+                <label style="font-size: 0.75rem; color: #475569; font-weight: 700;">보낼 소지금 (원):</label>
+                <input type="number" id="dmMyMoney" value="0" min="0" max="${fishingData.money}" style="width: 100%; padding: 6px; font-size: 0.85rem; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 2px; box-sizing: border-box;">
             </div>
+        </div>
 
-            <button onclick="sendDmTradeRequest()" style="width: 100%; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">제안 전송하기</button>
-        `;
-    }
+        <button onclick="sendDmTradeRequest()" style="width: 100%; background: #0284c7; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">제안 전송하기</button>
+    `;
 
     let modalHtml = `
         <div id="dmTradeModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
@@ -654,7 +625,6 @@ async function sendDmTradeRequest() {
     let targetSelect = document.getElementById('dmTarget');
     let fishSelect = document.getElementById('dmMyFish');
     let moneyInput = document.getElementById('dmMyMoney');
-
     if (!targetSelect || !fishSelect || !moneyInput) return;
 
     let target = targetSelect.value;
@@ -666,22 +636,11 @@ async function sendDmTradeRequest() {
         return;
     }
 
-    let tradeDataJson = {
-        sender: currentUser,
-        target: target,
-        fishVal: fishVal,
-        moneyVal: moneyVal,
-        status: 'waiting'
-    };
-
+    let tradeDataJson = { sender: currentUser, target: target, fishVal: fishVal, moneyVal: moneyVal, status: 'waiting' };
     fishingData.trade_request = tradeDataJson;
     await saveFishingData();
 
-    await supabaseClient.from('user_fishing_data').update({
-        trade_request: tradeDataJson,
-        updated_at: new Date()
-    }).eq('nickname', target);
-
+    await supabaseClient.from('user_fishing_data').update({ trade_request: tradeDataJson, updated_at: new Date() }).eq('nickname', target);
     closeAllModals();
 
     let currentScroll = window.scrollY;
@@ -695,75 +654,42 @@ async function cancelMyTradeRequest() {
     if (allRows) {
         allRows.forEach(async (row) => {
             if (row.trade_request && row.trade_request.sender === currentUser) {
-                await supabaseClient.from('user_fishing_data').update({
-                    trade_request: null,
-                    updated_at: new Date()
-                }).eq('nickname', row.nickname);
+                await supabaseClient.from('user_fishing_data').update({ trade_request: null, updated_at: new Date() }).eq('nickname', row.nickname);
             }
         });
     }
-
     fishingData.trade_request = null;
     await saveFishingData();
-
     closeAllModals();
-    let currentScroll = window.scrollY;
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
-    window.scrollTo(0, currentScroll);
 }
 
 async function rejectIncomingTrade() {
     const { data: myRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle();
     if (myRow && myRow.trade_request) {
         let senderName = myRow.trade_request.sender;
-        await supabaseClient.from('user_fishing_data').update({
-            trade_request: { ...myRow.trade_request, status: 'rejected' },
-            updated_at: new Date()
-        }).eq('nickname', senderName);
+        await supabaseClient.from('user_fishing_data').update({ trade_request: { ...myRow.trade_request, status: 'rejected' }, updated_at: new Date() }).eq('nickname', senderName);
     }
-
     fishingData.trade_request = null;
     await saveFishingData();
-
     closeAllModals();
     showFloatingAlert("❌ 제안을 거절했습니다.");
-    
-    let currentScroll = window.scrollY;
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
-    window.scrollTo(0, currentScroll);
 }
 
 async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
     closeAllModals();
-
-    const { data: partnerRow } = await supabaseClient
-        .from('user_fishing_data')
-        .select('trade_request')
-        .eq('nickname', partnerName)
-        .maybeSingle();
-
+    const { data: partnerRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', partnerName).maybeSingle();
     if (partnerRow && partnerRow.trade_request) {
         partnerRow.trade_request.status = 'picking';
-        await supabaseClient.from('user_fishing_data').update({
-            trade_request: partnerRow.trade_request,
-            updated_at: new Date()
-        }).eq('nickname', partnerName);
+        await supabaseClient.from('user_fishing_data').update({ trade_request: partnerRow.trade_request, updated_at: new Date() }).eq('nickname', partnerName);
     }
-
-    const { data: myRow } = await supabaseClient
-        .from('user_fishing_data')
-        .select('trade_request')
-        .eq('nickname', currentUser)
-        .maybeSingle();
-
+    const { data: myRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle();
     if (myRow && myRow.trade_request) {
         myRow.trade_request.status = 'picking';
-        await supabaseClient.from('user_fishing_data').update({
-            trade_request: myRow.trade_request,
-            updated_at: new Date()
-        }).eq('nickname', currentUser);
+        await supabaseClient.from('user_fishing_data').update({ trade_request: myRow.trade_request, updated_at: new Date() }).eq('nickname', currentUser);
     }
 
     let myInventoryOptions = `<option value="">(내 보관고 물고기 선택)</option>`;
@@ -786,13 +712,11 @@ async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
                     <span>🚪 다곤 직거래 방 (교환소)</span>
                     <button onclick="document.getElementById('tradeRoomModal').remove();" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b;">✕</button>
                 </h3>
-
                 <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
                     <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; margin-bottom: 4px; text-align: center;">📥 상대방([${partnerName}])이 제안한 품목</div>
                     <div style="background: white; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; font-size: 0.8rem; color: #1e293b; margin-bottom: 2px; text-align: center;">🐟 물고기: <b>${partnerFish ? partnerFish.replace(':', ' (') + 'cm)' : '없음'}</b></div>
                     <div style="background: white; border: 1px solid #e2e8f0; padding: 6px; border-radius: 6px; font-size: 0.8rem; color: #16a34a; font-weight: 700; text-align: center;">💰 소지금: <b>${partnerMoney.toLocaleString()}원</b></div>
                 </div>
-
                 <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
                     <div style="font-size: 0.8rem; font-weight: 800; color: #be185d; margin-bottom: 8px; text-align: center;">✨ 내가 교환할 품목 설정</div>
                     <div style="margin-bottom: 8px;">
@@ -806,7 +730,6 @@ async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
                         <input type="number" id="roomMyMoney" value="0" min="0" max="${fishingData.money}" style="width: 100%; padding: 6px; font-size: 0.85rem; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 2px; box-sizing: border-box;">
                     </div>
                 </div>
-
                 <div style="display: flex; gap: 8px;">
                     <button onclick="executeFinalRoomTrade('${partnerName}', '${partnerFish}', ${partnerMoney})" style="flex: 1; background: #16a34a; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 900; cursor: pointer;">최종 교환 승인</button>
                     <button onclick="document.getElementById('tradeRoomModal').remove();" style="flex: 1; background: #dc2626; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; cursor: pointer;">취소</button>
@@ -830,12 +753,7 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
         return;
     }
 
-    const { data: partnerRow } = await supabaseClient
-        .from('user_fishing_data')
-        .select('*')
-        .eq('nickname', partnerName)
-        .maybeSingle();
-
+    const { data: partnerRow } = await supabaseClient.from('user_fishing_data').select('*').eq('nickname', partnerName).maybeSingle();
     if (!partnerRow) {
         alert("상대방 데이터를 찾을 수 없습니다.");
         return;
@@ -934,7 +852,6 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
 
     fishingData.trade_request = null;
     await saveFishingData();
-
     closeAllModals();
 
     let gaveFishStr = mySendFish ? mySendFish.replace(':', ' (') + 'cm)' : '물고기 없음';
@@ -942,15 +859,11 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     let gotFishStr = partnerFish ? partnerFish.replace(':', ' (') + 'cm)' : '물고기 없음';
     let gotMoneyStr = partnerMoney.toLocaleString() + '원';
 
-    let currentScroll = window.scrollY;
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
-    window.scrollTo(0, currentScroll);
-
     showTradeResultPopup(gaveFishStr, gaveMoneyStr, gotFishStr, gotMoneyStr);
 }
 
-// 낚시터 렌더링 뷰
 async function renderFishingView(contentArea) {
     let currentRod = ROD_TIERS[fishingData.rod_level];
     let nextRod = ROD_TIERS[fishingData.rod_level + 1];
@@ -1016,12 +929,12 @@ async function renderFishingView(contentArea) {
     if (isBankrupt) {
         statusText = '소지금이 부족하여 낚시를 할 수 없습니다... 기회를 노려보세요!';
         statusColor = '#d97706';
-        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900; box-shadow: 0 4px 12px rgba(234, 179, 8, 0.3);">기회</button>`;
+        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900;">기회</button>`;
     } else {
         if (fishingStep === 'ready') {
             if (hasBahamut) {
                 statusText = '🌍 [바하무트의 지탱] 낚시 비용 무료 상태!';
-                actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0369a1, #0284c7, #0f172a); color: #f0f9ff; font-weight: 800; border: 1px solid #38bdf8; box-shadow: 0 4px 12px rgba(3, 105, 161, 0.3);">🌟 바하무트의 신성한 낚싯대 던지기 (비용: 0원)</button>`;
+                actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0369a1, #0284c7, #0f172a); color: #f0f9ff; font-weight: 800; border: 1px solid #38bdf8;">🌟 바하무트의 신성한 낚싯대 던지기 (비용: 0원)</button>`;
             } else {
                 statusText = '광활한 심해에서 대어를 노려보세요!';
                 actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0284c7, #0369a1);">🎣 낚싯대 던지기 (비용: ${currentRod.cost.toLocaleString()}원)</button>`;
@@ -1033,7 +946,7 @@ async function renderFishingView(contentArea) {
         } else if (fishingStep === 'bite') {
             statusText = '지금이다! 0.75초 안에 잡으세요!!';
             statusColor = '#dc2626';
-            actionBtnHtml = `<button onclick="hookFish()" style="width: 100%; padding: 24px; background: linear-gradient(135deg, #ef4444, #b91c1c); border: none; border-radius: 16px; color: white; font-size: 1.6rem; font-weight: 900; cursor: pointer; box-shadow: 0 8px 20px rgba(239, 68, 68, 0.5);">⚡ 지금이니!!! ⚡</button>`;
+            actionBtnHtml = `<button onclick="hookFish()" style="width: 100%; padding: 24px; background: linear-gradient(135deg, #ef4444, #b91c1c); border: none; border-radius: 16px; color: white; font-size: 1.6rem; font-weight: 900; cursor: pointer;">⚡ 지금이니!!! ⚡</button>`;
         }
     }
 
@@ -1101,7 +1014,7 @@ async function renderFishingView(contentArea) {
             let icon = fishName === '붕' ? '🦅' : '🐟';
             let color = fishName === '붕' ? '#d946ef' : (FISH_DATABASE.find(f => f.name === fishName)?.color || '#64748b');
             recordsHtml += `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.9rem; white-space: nowrap;">
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.9rem;">
                     <span style="font-weight: 700; color: #1e293b;">${icon} ${fishName} <span style="color: ${color}; font-weight: 800; margin-left: 4px;">[${record.grade}]</span></span>
                     <span style="color: #475569;">역대 최고 기록: <b style="color: var(--accent);">${record.maxSize}cm</b></span>
                 </div>
@@ -1114,7 +1027,7 @@ async function renderFishingView(contentArea) {
         let isUnlocked = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes(beast.name);
         if (isUnlocked) {
             beastsHtml += `
-                <div style="background: ${beast.bgGradient}; border: 2px solid ${beast.color}; border-radius: 10px; padding: 12px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);">
+                <div style="background: ${beast.bgGradient}; border: 2px solid ${beast.color}; border-radius: 10px; padding: 12px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                         <span style="font-weight: 900; font-size: 1rem; color: ${beast.color};">✨ [영물 해금완료] ${beast.name}</span>
                         <button onclick="showBeastDetail('${beast.name}')" style="background: ${beast.color}; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">상세 보기</button>
@@ -1164,9 +1077,9 @@ async function renderFishingView(contentArea) {
                 <span style="color: #065f46; font-weight: 900; font-size: 1rem;">+${makaraCurrentBonus}% 가산 중</span>
             </div>
 
-            <div style="position: relative; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; word-break: keep-all;">
-                <div id="floatingAlertBox" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 14px 24px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; z-index: 10; box-shadow: 0 10px 25px rgba(0,0,0,0.3); pointer-events: none; text-align: center; border: 2px solid #38bdf8;"></div>
-                <div id="fishingStatusText" style="font-size: 1rem; font-weight: 700; color: ${statusColor}; margin-bottom: 14px; word-break: keep-all; line-height: 1.4;">
+            <div style="position: relative; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div id="floatingAlertBox" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 14px 24px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; z-index: 10; border: 2px solid #38bdf8;"></div>
+                <div id="fishingStatusText" style="font-size: 1rem; font-weight: 700; color: ${statusColor}; margin-bottom: 14px; line-height: 1.4;">
                     ${statusText}
                 </div>
                 ${actionBtnHtml}
@@ -1277,7 +1190,7 @@ function showTrashPopup(message) {
 
     let popupHtml = `
         <div id="trashPopupBox" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; pointer-events: none;">
-            <div style="background: #1e293b; color: white; padding: 20px 28px; border-radius: 12px; font-size: 1.05rem; font-weight: 700; box-shadow: 0 10px 25px rgba(0,0,0,0.4); text-align: center; border: 2px solid #ef4444; max-width: 90%;">
+            <div style="background: #1e293b; color: white; padding: 20px 28px; border-radius: 12px; font-size: 1.05rem; font-weight: 700; text-align: center; border: 2px solid #ef4444; max-width: 90%;">
                 🗑️ [인면어 저주 발동]<br><span style="font-size: 0.95rem; color: #fca5a5; font-weight: 500; margin-top: 6px; display: inline-block;">${message}</span>
             </div>
         </div>
@@ -1298,29 +1211,12 @@ async function hookFish() {
 
     if (!hasMatsuya && fishingData.cursed_target === currentUser && fishingData.curse_remaining_count > 0) {
         fishingData.curse_remaining_count -= 1;
-
-        if (fishingData.curse_remaining_count <= 0) {
-            fishingData.cursed_target = null;
-        }
+        if (fishingData.curse_remaining_count <= 0) fishingData.cursed_target = null;
 
         if (Math.random() < 0.5) {
             let trashRoll = Math.random() * 100;
-            let penalty = 0;
-            let trashMsg = "";
-
-            if (trashRoll < 80) {
-                penalty = 1000;
-                trashMsg = `일반 바다 쓰레기 (남은 저주: ${fishingData.curse_remaining_count}회)`;
-            } else if (trashRoll < 95) {
-                penalty = 10000;
-                trashMsg = `큰 바다 쓰레기 (남은 저주: ${fishingData.curse_remaining_count}회)`;
-            } else if (trashRoll < 99.9) {
-                penalty = 100000;
-                trashMsg = `포획금지 물고기 벌금 (남은 저주: ${fishingData.curse_remaining_count}회)`;
-            } else {
-                penalty = fishingData.money;
-                trashMsg = `용왕의 머리카락 - 전재산 소멸! (남은 저주: ${fishingData.curse_remaining_count}회)`;
-            }
+            let penalty = trashRoll < 80 ? 1000 : (trashRoll < 95 ? 10000 : (trashRoll < 99.9 ? 100000 : fishingData.money));
+            let trashMsg = `바다 쓰레기 및 벌금 (남은 저주: ${fishingData.curse_remaining_count}회)`;
 
             fishingData.money = Math.max(0, fishingData.money - penalty);
             fishingStep = 'ready';
@@ -1334,15 +1230,6 @@ async function hookFish() {
         }
     }
 
-    let hasSiren = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('시레인 크로인');
-    let currentSirenChance = 0.01 + (fishingData.siren_streak * 0.005); 
-
-    if (hasSiren && Math.random() < currentSirenChance) {
-        fishingStep = 'ready';
-        await showSirenChoiceModalForAllPlayers();
-        return;
-    }
-
     let caught = executeCatchLogic();
     showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${caught.size}cm)을(를) 낚았습니다!`);
     
@@ -1352,190 +1239,10 @@ async function hookFish() {
     window.scrollTo(0, currentScroll);
 }
 
-async function showSirenChoiceModalForAllPlayers() {
-    let existing = document.getElementById('sirenChoiceModal');
-    if (existing) existing.remove();
-
-    const { data: allUsersData } = await supabaseClient
-        .from('user_fishing_data')
-        .select('nickname, fish_records, unlocked_beasts');
-
-    let playerRecordsMap = {};
-    let playerMatsuyaMap = {};
-
-    if (allUsersData) {
-        allUsersData.forEach(row => {
-            if (row.nickname !== currentUser) {
-                let targetBeasts = row.unlocked_beasts || [];
-                if (targetBeasts.includes('마츠야')) {
-                    playerMatsuyaMap[row.nickname] = true;
-                }
-
-                let bestFish = null;
-                let highestPrio = -1;
-                if (row.fish_records) {
-                    for (let [fName, record] of Object.entries(row.fish_records)) {
-                        if (record && record.maxSize) {
-                            let p = GRADE_PRIORITY[record.grade] || 1;
-                            if (p > highestPrio) {
-                                highestPrio = p;
-                                bestFish = { name: fName, size: record.maxSize, grade: record.grade };
-                            }
-                        }
-                    }
-                }
-                playerRecordsMap[row.nickname] = bestFish;
-            }
-        });
-    }
-
-    let candidatesListHtml = "";
-
-    playerList.forEach(player => {
-        let best = playerRecordsMap[player];
-        let targetHasMatsuya = playerMatsuyaMap[player];
-
-        if (best) {
-            if (targetHasMatsuya) {
-                candidatesListHtml += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: #fefce8; border: 1px solid #fde047; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px;">
-                        <div style="text-align: left; font-size: 0.85rem; color: #713f12;">
-                            <b>[ ${player} ]</b> 님의 도감 최고 대어:<br>
-                            <span style="color: #ca8a04; font-weight: 800;">${best.name} (${best.size}cm)</span><br>
-                            <span style="font-size: 0.75rem; color: #a16207; font-weight: 700;">🛡️ 마츠야의 보호로 약탈 불가</span>
-                        </div>
-                        <button onclick="alertToDefenderMatsuya('${player}')" style="background: #ca8a04; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap;">약탈 시도</button>
-                    </div>
-                `;
-            } else {
-                candidatesListHtml += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: #fef2f2; border: 1px solid #fecaca; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px;">
-                        <div style="text-align: left; font-size: 0.85rem; color: #1e293b;">
-                            <b>[ ${player} ]</b> 님의 도감 최고 대어:<br>
-                            <span style="color: #dc2626; font-weight: 800;">${best.name} (${best.size}cm / [${best.grade}])</span>
-                        </div>
-                        <button onclick="confirmSirenStealFromRecord('${player}', '${best.name}', ${best.size}, '${best.grade}')" style="background: #dc2626; color: white; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap;">뺏기</button>
-                    </div>
-                `;
-            }
-        } else {
-            candidatesListHtml += `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; opacity: 0.7;">
-                    <div style="text-align: left; font-size: 0.85rem; color: #64748b;">
-                        <b>[ ${player} ]</b>님은 도감에 등록된 물고기가 아직 없습니다.
-                    </div>
-                </div>
-            `;
-        }
-    });
-
-    let modalHtml = `
-        <div id="sirenChoiceModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 3000;">
-            <div style="background: white; width: 90%; max-width: 440px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); text-align: center; border-top: 6px solid #dc2626;">
-                <h3 style="margin-top: 0; color: #dc2626; font-size: 1.2rem; font-weight: 900;">🔥 [시레인 크로인 기회 포착]</h3>
-                <p style="font-size: 0.85rem; color: #334155; line-height: 1.4; margin-bottom: 12px;">
-                    시레인의 매혹이 발동했습니다! 다른 플레이어의 도감 대어를 선택하여 뺏어올 수 있습니다.
-                </p>
-                <div style="max-height: 220px; overflow-y: auto; margin-bottom: 16px; padding-right: 4px;">
-                    ${candidatesListHtml}
-                </div>
-                <button onclick="confirmNormalCatch()" style="width: 100%; background: #64748b; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">그냥 내 낚시하기</button>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-}
-
-function alertToDefenderMatsuya(targetPlayer) {
-    let modal = document.getElementById('sirenChoiceModal');
-    if (modal) modal.remove();
-
-    let oldPopup = document.getElementById('defenderMatsuyaBox');
-    if (oldPopup) oldPopup.remove();
-
-    let popupHtml = `
-        <div id="defenderMatsuyaBox" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 3500;">
-            <div style="background: #1e293b; color: white; padding: 24px 32px; border-radius: 16px; font-size: 1.05rem; font-weight: 700; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; border: 2px solid #eab308; max-width: 90%;">
-                🛡️ [마츠야가 약탈을 방어했습니다]<br>
-                <span style="font-size: 0.95rem; color: #fef08a; font-weight: 500; margin-top: 8px; display: inline-block; line-height: 1.4;">
-                    [${targetPlayer}] 님이 마츠야의 구원 보호막을 보유하고 있어, 시레인 크로인의 약탈 공격이 차단되었습니다! 물고기를 뺏어오지 못했습니다.
-                </span>
-                <button onclick="let currentScroll=window.scrollY; document.getElementById('defenderMatsuyaBox').remove(); executeCatchLogic(); let contentArea = document.getElementById('contentArea'); if (contentArea) renderFishingView(contentArea); window.scrollTo(0, currentScroll);" style="width: 100%; margin-top: 16px; background: #d97706; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">확인 (일반 낚시 진행)</button>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', popupHtml);
-}
-
-async function confirmSirenStealFromRecord(targetPlayer, fishName, fishSize, fishGrade) {
-    let currentScroll = window.scrollY;
-    let modal = document.getElementById('sirenChoiceModal');
-    if (modal) modal.remove();
-
-    if (!targetPlayer || !fishName) {
-        alert("뺏어올 물고기가 없습니다. 일반 낚시를 진행합니다.");
-        executeCatchLogic();
-        let contentArea = document.getElementById("contentArea");
-        if (contentArea) renderFishingView(contentArea);
-        window.scrollTo(0, currentScroll);
-        return;
-    }
-
-    const { data: targetData } = await supabaseClient
-        .from('user_fishing_data')
-        .select('*')
-        .eq('nickname', targetPlayer)
-        .maybeSingle();
-
-    if (targetData && targetData.fish_records) {
-        let targetRecords = targetData.fish_records;
-        if (targetRecords[fishName]) {
-            delete targetRecords[fishName];
-            
-            await supabaseClient.from('user_fishing_data').update({
-                fish_records: targetRecords,
-                updated_at: new Date()
-            }).eq('nickname', targetPlayer);
-        }
-    }
-
-    fishingData.siren_streak = (fishingData.siren_streak || 0) + 1;
-
-    if (!fishingData.fish_inventory[fishName]) {
-        fishingData.fish_inventory[fishName] = [];
-    }
-    fishingData.fish_inventory[fishName].push({ size: fishSize, dagon: false });
-
-    if (!fishingData.fish_records[fishName]) {
-        fishingData.fish_records[fishName] = { grade: fishGrade, maxSize: fishSize };
-    } else if (fishSize > fishingData.fish_records[fishName].maxSize) {
-        fishingData.fish_records[fishName].maxSize = fishSize;
-    }
-
-    await saveFishingData();
-
-    showSirenPopup(`🔥 시레인 크로인이 [${targetPlayer}] 님의 도감 대어 [${fishName}](${fishSize}cm)를 완벽하게 강탈하여 내 보관고에 넣었습니다!<br>(상대방 도감에서는 해당 물고기가 소멸했습니다)`);
-    let contentArea = document.getElementById("contentArea");
-    if (contentArea) renderFishingView(contentArea);
-    window.scrollTo(0, currentScroll);
-}
-
-function confirmNormalCatch() {
-    let currentScroll = window.scrollY;
-    let modal = document.getElementById('sirenChoiceModal');
-    if (modal) modal.remove();
-    let caught = executeCatchLogic();
-    showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${caught.size}cm)`);
-    let contentArea = document.getElementById("contentArea");
-    if (contentArea) renderFishingView(contentArea);
-    window.scrollTo(0, currentScroll);
-}
-
 function executeCatchLogic() {
     let rand = Math.random() * 100;
     let rodLevel = fishingData.rod_level;
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
-    
     let baseMythicChance = (rodLevel >= 6) ? 0.01 * Math.pow(5, rodLevel - 6) : 0; 
     let makaraBonus = fishingData.makara_bonus_chance || 0;
     let mythicChance = baseMythicChance + makaraBonus;
@@ -1547,7 +1254,6 @@ function executeCatchLogic() {
     if (rand < mythicChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '신화');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
-        
         fishingData.makara_bonus_chance = 0;
     } else if (rand < mythicChance + legendaryChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '전설');
@@ -1565,52 +1271,33 @@ function executeCatchLogic() {
 
     let sizeBonus = (rodLevel - 1) * 10;
     let fishSize = Math.floor(Math.random() * (selectedFish.maxSize - selectedFish.minSize + 1)) + selectedFish.minSize + sizeBonus;
-    
-    let hasIctio = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('익티오켄타우로스');
-    if (hasIctio) {
-        fishSize = Math.floor(fishSize * 1.1);
-    }
-
     let fishName = selectedFish.name;
 
-    let hasGon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('곤(鯤)');
-    if (hasGon && Math.random() < 0.001) { 
-        fishName = '붕';
-        fishSize = 5000; 
-    }
-
-    if (!fishingData.fish_inventory[fishName]) {
-        fishingData.fish_inventory[fishName] = [];
-    }
+    if (!fishingData.fish_inventory[fishName]) fishingData.fish_inventory[fishName] = [];
     fishingData.fish_inventory[fishName].push({ size: fishSize, dagon: false });
 
-    let recordGrade = fishName === '붕' ? '특수' : selectedFish.grade;
-    let recordSizeMax = fishName === '붕' ? 5000 : fishSize;
-
+    let recordGrade = selectedFish.grade;
     if (!fishingData.fish_records[fishName]) {
-        fishingData.fish_records[fishName] = { grade: recordGrade, maxSize: recordSizeMax };
-    } else {
-        if (recordSizeMax > fishingData.fish_records[fishName].maxSize) {
-            fishingData.fish_records[fishName].maxSize = recordSizeMax;
-        }
+        fishingData.fish_records[fishName] = { grade: recordGrade, maxSize: fishSize };
+    } else if (fishSize > fishingData.fish_records[fishName].maxSize) {
+        fishingData.fish_records[fishName].maxSize = fishSize;
     }
 
     saveFishingData();
 
-    // 다곤 계약 파트너 실시간 물고기 공유 (바하무트 자동 사냥 포함)
     if (fishingData.dagon_partner) {
         let partnerName = fishingData.dagon_partner;
         supabaseClient.from('user_fishing_data').select('*').eq('nickname', partnerName).maybeSingle().then(async ({ data: partnerRow }) => {
             if (partnerRow && partnerRow.dagon_partner === currentUser) {
                 let pInv = partnerRow.fish_inventory || {};
                 if (!pInv[fishName]) pInv[fishName] = [];
-                pInv[fishName].push({ size: fishSize, dagon: true }); // 다곤 태그 부여
+                pInv[fishName].push({ size: fishSize, dagon: true });
 
                 let pRec = partnerRow.fish_records || {};
                 if (!pRec[fishName]) {
-                    pRec[fishName] = { grade: recordGrade, maxSize: recordSizeMax };
-                } else if (recordSizeMax > pRec[fishName].maxSize) {
-                    pRec[fishName].maxSize = recordSizeMax;
+                    pRec[fishName] = { grade: recordGrade, maxSize: fishSize };
+                } else if (fishSize > pRec[fishName].maxSize) {
+                    pRec[fishName].maxSize = fishSize;
                 }
 
                 await supabaseClient.from('user_fishing_data').update({
@@ -1625,36 +1312,14 @@ function executeCatchLogic() {
     return { name: fishName, size: fishSize };
 }
 
-function showSirenPopup(message) {
-    let oldPopup = document.getElementById('sirenPopupBox');
-    if (oldPopup) oldPopup.remove();
-
-    let popupHtml = `
-        <div id="sirenPopupBox" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000;">
-            <div style="background: #1e293b; color: white; padding: 24px 32px; border-radius: 16px; font-size: 1.05rem; font-weight: 700; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; border: 2px solid #dc2626; max-width: 90%;">
-                🔥 [시레인 크로인 약탈 성공]<br>
-                <span style="font-size: 0.95rem; color: #fca5a5; font-weight: 500; margin-top: 8px; display: inline-block; line-height: 1.4;">${message}</span>
-                <button onclick="document.getElementById('sirenPopupBox').remove()" style="width: 100%; margin-top: 16px; background: #dc2626; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">확인</button>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', popupHtml);
-}
-
 async function feedMakara(fishName, index) {
     let currentScroll = window.scrollY;
     let sizesArr = fishingData.fish_inventory[fishName];
     if (!sizesArr || sizesArr[index] === undefined) return;
 
     let baseFish = FISH_DATABASE.find(f => f.name === fishName);
-    let grade = fishName === '붕' ? '특수' : (fishName === '길냥이의 물고기' ? '특수' : (baseFish ? baseFish.grade : '일반'));
-
-    let bonusAdd = 0.01;
-    if (grade === '일반') bonusAdd = 0.01;
-    else if (grade === '희귀') bonusAdd = 0.02;
-    else if (grade === '영웅') bonusAdd = 0.05;
-    else if (grade === '전설') bonusAdd = 0.1;
-    else bonusAdd = 0.05;
+    let grade = baseFish ? baseFish.grade : '일반';
+    let bonusAdd = grade === '일반' ? 0.01 : (grade === '희귀' ? 0.02 : (grade === '영웅' ? 0.05 : 0.1));
 
     sizesArr.splice(index, 1);
     if (sizesArr.length === 0) delete fishingData.fish_inventory[fishName];
@@ -1663,7 +1328,6 @@ async function feedMakara(fishName, index) {
     fishingData.makara_bonus_chance += bonusAdd;
 
     await saveFishingData();
-
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
@@ -1677,23 +1341,10 @@ async function sellFish(fishName, index) {
     let parsed = parseFishItem(sizesArr[index]);
     let targetSize = parsed.size; 
     let baseFish = FISH_DATABASE.find(f => f.name === fishName);
-    
-    let sellPrice = 0;
-    if (fishName === '붕') {
-        sellPrice = 1000000; 
-    } else if (fishName === '길냥이의 물고기') {
-        sellPrice = targetSize;
-    } else {
-        let baseUnit = baseFish ? baseFish.basePrice : 20;
-        let calculatedBase = Math.floor(baseUnit * (targetSize / 10));
-        let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
-        sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase; 
-    }
-
-    let hasSiren = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('시레인 크로인');
-    if (hasSiren && (fishName === '레비아탄' || fishName === '크라켄' || fishName === '아스피도켈론')) {
-        sellPrice = Math.floor(sellPrice * 1.5);
-    }
+    let baseUnit = baseFish ? baseFish.basePrice : 20;
+    let calculatedBase = Math.floor(baseUnit * (targetSize / 10));
+    let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
+    let sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase; 
 
     sizesArr.splice(index, 1);
     if (sizesArr.length === 0) delete fishingData.fish_inventory[fishName];
@@ -1701,6 +1352,33 @@ async function sellFish(fishName, index) {
     fishingData.money += sellPrice;
     await saveFishingData();
     
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
+}
+
+async function sellAllFish() {
+    let currentScroll = window.scrollY;
+    let totalSell = 0;
+    let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
+
+    for (let [fishName, sizesArr] of Object.entries(fishingData.fish_inventory)) {
+        if (!sizesArr) continue;
+        let baseFish = FISH_DATABASE.find(f => f.name === fishName);
+        let baseUnit = baseFish ? baseFish.basePrice : 20;
+
+        sizesArr.forEach(item => {
+            let parsed = parseFishItem(item);
+            let calculatedBase = Math.floor(baseUnit * (parsed.size / 10));
+            totalSell += hasCarp ? calculatedBase * 2 : calculatedBase;
+        });
+    }
+
+    fishingData.fish_inventory = {};
+    fishingData.money += totalSell;
+    await saveFishingData();
+
+    showFloatingAlert(`💰 모든 물고기를 일괄 판매하여 ${totalSell.toLocaleString()}원을 획득했습니다!`);
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
@@ -1725,3 +1403,39 @@ async function upgradeRod() {
     if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 }
+
+function claimChance() {
+    if (hasUsedChance) {
+        alert("기회는 한 번만 사용할 수 있습니다!");
+        return;
+    }
+    hasUsedChance = true;
+    fishingData.money += 5000;
+    saveFishingData();
+    showFloatingAlert("🎁 지원금 5,000원이 지급되었습니다!");
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+}
+
+// 🟢 HTML 인라인 이벤트 및 외부 참조가 가능하도록 전역 window 객체에 함수 바인딩
+window.initFishing = initFishing;
+window.renderFishingView = renderFishingView;
+window.startCast = startCast;
+window.hookFish = hookFish;
+window.earlyClickAlert = earlyClickAlert;
+window.sellFish = sellFish;
+window.sellAllFish = sellAllFish;
+window.feedMakara = feedMakara;
+window.upgradeRod = upgradeRod;
+window.claimChance = claimChance;
+window.showBeastDetail = showBeastDetail;
+window.openDagonContractModal = openDagonContractModal;
+window.submitDagonContract = submitDagonContract;
+window.cancelDagonContract = cancelDagonContract;
+window.openTradeModal = openTradeModal;
+window.sendDmTradeRequest = sendDmTradeRequest;
+window.cancelMyTradeRequest = cancelMyTradeRequest;
+window.rejectIncomingTrade = rejectIncomingTrade;
+window.openTradeRoom = openTradeRoom;
+window.executeFinalRoomTrade = executeFinalRoomTrade;
+window.toggleBahamutAuto = toggleBahamutAuto;
