@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (직거래 잔류 요청 완벽 제거 및 양방향 동기화 최종 완성본)
+// fishing.js - 심해 낚시터 (Supabase 컬럼 에러 해결 및 직거래 실시간 팝업/청소 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -10,7 +10,6 @@ let fishingData = {
     curse_remaining_count: 0,
     makara_bonus_chance: 0,
     siren_streak: 0,
-    bahamut_auto_active: true,
     dagon_partner: null,
     trade_request: null
 };
@@ -23,6 +22,7 @@ let biteTimer = null;
 let floatingAlertText = ""; 
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
 let hasUsedChance = false;
+let bahamutAutoActive = true; // 브라우저 로컬 상태로 분리하여 컬럼 에러 방지
 
 const ROD_TIERS = {
     1: { name: '🪵 나무 낚시대', price: 0, cost: 80 },
@@ -120,6 +120,10 @@ async function initFishing() {
 
     playerList = Array.from(fetchedPlayers).filter(n => n !== currentUser);
 
+    // 로컬 스토리지에서 바하무트 자동 사냥 상태 복원 (기본값 true)
+    let savedBahamut = localStorage.getItem(`bahamut_auto_${currentUser}`);
+    bahamutAutoActive = savedBahamut !== null ? JSON.parse(savedBahamut) : true;
+
     const { data } = await supabaseClient
         .from('user_fishing_data')
         .select('*')
@@ -141,7 +145,6 @@ async function initFishing() {
             curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
             makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
             siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
-            bahamut_auto_active: data.bahamut_auto_active !== undefined ? data.bahamut_auto_active : true,
             dagon_partner: data.dagon_partner || null,
             trade_request: data.trade_request || null
         };
@@ -160,7 +163,7 @@ async function initFishing() {
             dagon_partner: null,
             trade_request: null
         }]);
-        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, bahamut_auto_active: true, dagon_partner: null, trade_request: null };
+        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, trade_request: null };
     }
     hasUsedChance = false;
 
@@ -180,6 +183,7 @@ async function saveFishingData() {
         }
     }
 
+    // DB 스키마 에러를 막기 위해 없는 컬럼은 절대 포함하지 않음
     const { error } = await supabaseClient.from('user_fishing_data').upsert([{
         nickname: currentUser,
         money: fishingData.money,
@@ -191,7 +195,6 @@ async function saveFishingData() {
         curse_remaining_count: fishingData.curse_remaining_count,
         makara_bonus_chance: fishingData.makara_bonus_chance,
         siren_streak: fishingData.siren_streak,
-        bahamut_auto_active: fishingData.bahamut_auto_active,
         dagon_partner: fishingData.dagon_partner,
         trade_request: fishingData.trade_request,
         updated_at: new Date()
@@ -202,16 +205,34 @@ async function saveFishingData() {
     }
 }
 
-// 실시간 폴링 (거래 상태 변경 자동 감지 및 잔류 요청 청소)
+// 실시간 폴링 (거래 상태 자동 감지, 팝업 띄우기 및 잔류 요청 완벽 청소)
 function startTradePolling() {
     if (tradePollingInterval) clearInterval(tradePollingInterval);
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
+        // 1. 나에게 온 제안이 있는지 확인하고, 있다면 자동으로 팝업 띄우기
+        const { data: myRow } = await supabaseClient
+            .from('user_fishing_data')
+            .select('trade_request')
+            .eq('nickname', currentUser)
+            .maybeSingle();
+
+        if (myRow && myRow.trade_request && myRow.trade_request.target === currentUser) {
+            let req = myRow.trade_request;
+            if (req.status === 'waiting') {
+                let currentModal = document.getElementById('dmTradeModal');
+                // 아직 모달이 안 열려있다면 자동으로 제안 팝업 창 오픈
+                if (!currentModal) {
+                    openTradeModal();
+                }
+            }
+        }
+
+        // 2. 내가 보낸 제안의 상태 변화 감지 (완료 또는 거절)
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
             for (let row of allRows) {
-                // 1. 내가 보낸 제안이 완료되었거나 거절된 경우 감지
                 if (row.trade_request && row.trade_request.sender === currentUser) {
                     let req = row.trade_request;
                     if (req.status === 'completed') {
@@ -221,9 +242,8 @@ function startTradePolling() {
                         let myGotFish = tInfo.gaveFish ? tInfo.gaveFish.replace(':', ' (') + 'cm)' : '물고기 없음';
                         let myGotMoney = (tInfo.gaveMoney || 0).toLocaleString() + '원';
 
-                        // 상대방 DB에 남아있는 요청 흔적도 완전히 삭제
+                        // 상대방 DB와 내 DB 양쪽 모두 잔류 요청 싹 비우기
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
-                        // 내 로컬 상태와 DB도 완전히 청소
                         fishingData.trade_request = null;
                         await saveFishingData();
                         await initFishing();
@@ -235,7 +255,7 @@ function startTradePolling() {
                         return;
                     } else if (req.status === 'rejected') {
                         let target = req.target;
-                        // 상대방 DB 및 내 DB 모두 요청 흔적 완벽 제거
+                        // 상대방 DB와 내 DB 양쪽 모두 잔류 요청 싹 비우기
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
                         fishingData.trade_request = null;
                         await saveFishingData();
@@ -281,7 +301,7 @@ function startBahamutAutoFishing() {
     if (autoFishingInterval) clearInterval(autoFishingInterval);
     autoFishingInterval = setInterval(async () => {
         let hasBahamut = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('바하무트');
-        if (!hasBahamut || !currentUser || !fishingData.bahamut_auto_active) return;
+        if (!hasBahamut || !currentUser || !bahamutAutoActive) return;
 
         let caught = executeCatchLogic();
         if (caught) {
@@ -306,10 +326,12 @@ function showFloatingAlert(text) {
 
 async function toggleBahamutAuto() {
     let currentScroll = window.scrollY;
-    fishingData.bahamut_auto_active = !fishingData.bahamut_auto_active;
-    await saveFishingData();
+    bahamutAutoActive = !bahamutAutoActive;
+    
+    // 브라우저 로컬 스토리지에 상태 저장
+    localStorage.setItem(`bahamut_auto_${currentUser}`, JSON.stringify(bahamutAutoActive));
 
-    let statusMsg = fishingData.bahamut_auto_active ? "활성화 (30초마다 자동 낚시)" : "비활성화 (정지됨)";
+    let statusMsg = bahamutAutoActive ? "활성화 (30초마다 자동 낚시)" : "비활성화 (정지됨)";
     showFloatingAlert(`🌍 바하무트 자동 사냥: ${statusMsg}`);
     
     closeAllModals();
@@ -372,12 +394,11 @@ function showBeastDetail(beastName) {
                 </div>
             `;
         } else if (beastName === '바하무트') {
-            let isAutoActive = fishingData.bahamut_auto_active;
-            let btnBg = isAutoActive ? '#dc2626' : '#16a34a';
-            let btnText = isAutoActive ? '⏹️ 바하무트 자동 사냥 끄기' : '▶️ 바하무트 자동 사냥 켜기';
+            let btnBg = bahamutAutoActive ? '#dc2626' : '#16a34a';
+            let btnText = bahamutAutoActive ? '⏹️ 바하무트 자동 사냥 끄기' : '▶️ 바하무트 자동 사냥 켜기';
             extraAction = `
                 <div style="margin-top: 12px; background: #fff7ed; border: 1px solid #b45309; padding: 10px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 0.85rem; color: #9a3412; font-weight: 700; margin-bottom: 6px;">상태: ${isAutoActive ? '자동 사냥 작동 중 (30초)' : '정지됨'}</div>
+                    <div style="font-size: 0.85rem; color: #9a3412; font-weight: 700; margin-bottom: 6px;">상태: ${bahamutAutoActive ? '자동 사냥 작동 중 (30초)' : '정지됨'}</div>
                     <button onclick="toggleBahamutAuto()" style="width: 100%; background: ${btnBg}; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer;">${btnText}</button>
                 </div>
             `;
@@ -518,11 +539,9 @@ async function sendDmTradeRequest() {
         status: 'waiting'
     };
 
-    // 내 로컬 상태와 DB에 동시에 저장
     fishingData.trade_request = tradeDataJson;
     await saveFishingData();
 
-    // 상대방 DB에도 제안 전달
     await supabaseClient.from('user_fishing_data').update({
         trade_request: tradeDataJson,
         updated_at: new Date()
@@ -537,7 +556,6 @@ async function sendDmTradeRequest() {
 }
 
 async function cancelMyTradeRequest() {
-    // 상대방들의 DB에서 내가 보낸 요청을 찾아 모두 제거
     const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
     if (allRows) {
         allRows.forEach(async (row) => {
@@ -550,7 +568,6 @@ async function cancelMyTradeRequest() {
         });
     }
 
-    // 내 로컬 및 DB에서도 즉시 제거
     fishingData.trade_request = null;
     await saveFishingData();
 
@@ -565,14 +582,12 @@ async function rejectIncomingTrade() {
     const { data: myRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle();
     if (myRow && myRow.trade_request) {
         let senderName = myRow.trade_request.sender;
-        // 보낸 사람의 DB 행에 거절 상태 전송
         await supabaseClient.from('user_fishing_data').update({
             trade_request: { ...myRow.trade_request, status: 'rejected' },
             updated_at: new Date()
         }).eq('nickname', senderName);
     }
 
-    // 내 DB에서도 요청 제거
     fishingData.trade_request = null;
     await saveFishingData();
 
@@ -681,7 +696,6 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
         return;
     }
 
-    // 1. 내가 보낸 물고기 내 인벤토리에서 제거 -> 상대방에게 추가
     if (mySendFish) {
         let [fName, fSzStr] = mySendFish.split(':');
         let fSz = parseInt(fSzStr);
@@ -707,7 +721,6 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
         }
     }
 
-    // 2. 상대방이 보낸 물고기 상대방 인벤토리에서 제거 -> 내게 추가
     let pInv = partnerRow.fish_inventory || {};
     if (partnerFish) {
         let [fName, fSzStr] = partnerFish.split(':');
@@ -732,11 +745,9 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
         }
     }
 
-    // 3. 소지금 스왑
     fishingData.money = fishingData.money - mySendMoney + partnerMoney;
     partnerRow.money = (partnerRow.money || 0) - partnerMoney + mySendMoney;
 
-    // 4. DB 반영 (완료 상태 전달하여 상대방 폴링에서 감지 후 정리되도록 함)
     let completedTradeInfo = {
         status: 'completed',
         sender: partnerName,
@@ -755,7 +766,6 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
         updated_at: new Date()
     }).eq('nickname', partnerName);
 
-    // 내 로컬 및 DB에서도 요청 즉시 초기화
     fishingData.trade_request = null;
     await saveFishingData();
 
