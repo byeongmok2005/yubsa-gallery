@@ -78,8 +78,14 @@ function renderSidebarMenu() {
 }
 
 function setupRealtimeSubscriptions() {
+    // 🟢 채널 이름을 고유하게 만들어 기존 구독과의 충돌 방지
+    const channelName = 'public-db-changes-' + (currentUser || 'guest');
+    
+    // 혹시 기존에 남아있는 같은 이름의 채널이 있다면 제거
+    supabaseClient.removeAllChannels();
+
     supabaseClient
-        .channel('public-db-changes')
+        .channel(channelName)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, payload => {
             if (payload.new && payload.new.uploader !== currentUser) {
                 addNotification(`📸 [${payload.new.uploader}]님이 새로운 엽사를 올렸습니다!`);
