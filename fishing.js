@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (상단 알림 팝업 고정 버전)
+// fishing.js - 심해 낚시터 (길냥이 물고기 획득 연동 및 지원금 제거 버전)
 
 let fishingData = { 
     money: 1000, 
@@ -22,7 +22,6 @@ let biteTimeout = null;
 let biteTimer = null; 
 let floatingAlertText = ""; 
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
-let hasUsedChance = false;
 let bahamutAutoActive = true; 
 
 const ROD_TIERS = {
@@ -223,7 +222,6 @@ async function initFishing() {
         }]);
         fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null };
     }
-    hasUsedChance = false;
 
     await checkDagonMutualStatus();
 
@@ -984,9 +982,9 @@ async function renderFishingView(contentArea) {
     let isBankrupt = (fishingData.money < effectiveCost && !hasInventoryFish() && fishingStep === 'ready');
 
     if (isBankrupt) {
-        statusText = '소지금이 부족하여 낚시를 할 수 없습니다... 기회를 노려보세요!';
+        statusText = '소지금이 부족하여 낚시를 할 수 없습니다... 길냥이에게 물고기를 뺏어오세요!';
         statusColor = '#d97706';
-        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900;">기회</button>`;
+        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900;">🐱 길냥이에게 물고기 뺏기 (기회)</button>`;
     } else {
         if (fishingStep === 'ready') {
             if (hasBahamut) {
@@ -1135,7 +1133,6 @@ async function renderFishingView(contentArea) {
     let alertBoxDisplay = floatingAlertText ? 'block' : 'none';
 
     contentArea.innerHTML = `
-        <!-- 🟢 낚시 방해를 없애기 위해 화면 상단 중앙에 고정되는 알림 팝업 -->
         <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 12px 24px; border-radius: 12px; font-size: 0.95rem; font-weight: 800; z-index: 9999; border: 2px solid #38bdf8; box-shadow: 0 6px 20px rgba(0,0,0,0.3); text-align: center; pointer-events: none; max-width: 90%;">${floatingAlertText}</div>
 
         <div class="card">
@@ -1509,17 +1506,22 @@ async function upgradeRod() {
     window.scrollTo(0, currentScroll);
 }
 
-function claimChance() {
-    if (hasUsedChance) {
-        alert("기회는 한 번만 사용할 수 있습니다!");
-        return;
+// 🐱 파산 시 길냥이에게 물고기를 뺏어오는 구제 시스템 (기회 버튼 연동)
+async function claimChance() {
+    let currentScroll = window.scrollY;
+    let catFishSize = Math.floor(Math.random() * 41) + 30; // 30 ~ 70cm 랜덤 크기
+
+    if (!fishingData.fish_inventory['길냥이의 물고기']) {
+        fishingData.fish_inventory['길냥이의 물고기'] = [];
     }
-    hasUsedChance = true;
-    fishingData.money += 5000;
-    saveFishingData();
-    showFloatingAlert("🎁 지원금 5,000원이 지급되었습니다!");
+    fishingData.fish_inventory['길냥이의 물고기'].push({ size: catFishSize, dagon: false });
+
+    await saveFishingData();
+    showFloatingAlert(`🐱 길냥이에게 물고기(${catFishSize}cm)를 뺏어왔습니다! 보관고를 확인하세요.`);
+    
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
 }
 
 // 🟢 HTML 인라인 이벤트 및 외부 참조가 가능하도록 전역 window 객체에 함수 바인딩
