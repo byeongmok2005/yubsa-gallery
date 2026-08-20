@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (영물 0.01% 낚시 및 중복 방지 완성본)
+// fishing.js - 심해 낚시터 (마카라 보유 검증 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -88,7 +88,7 @@ const MYTHICAL_BEASTS = [
     { name: '마츠야', color: '#d97706', bgGradient: 'linear-gradient(135deg, #fffbeb, #fef3c7)', desc: '인류를 대홍수로부터 구하기 위해 최고신이 변신한 황금빛 뿔이 달린 거대한 물고기입니다.', ability: '🛡️ 고유 영물 (구원의 자비): 인면어의 저주나 시레인 크로인의 약탈 공격으로부터 자동으로 보호막을 쳐서 모든 피해를 완벽히 차단합니다!' },
     { name: '다곤', color: '#78716c', bgGradient: 'linear-gradient(135deg, #fafaf9, #f5f5f4)', desc: '상반신은 인간, 하반신은 물고기 모양을 한 고대 블레셋인들의 풍요와 농경의 신입니다.', ability: '🤝 고유 영물 (풍요와 거래/상호 계약): 두 플레이어가 서로를 다곤 파트너로 상호 지목하여 연결되면, 어느 한쪽이 낚시할 때 물고기가 서로에게 실시간 복사됩니다!' },
     { name: '바하무트', color: '#b45309', bgGradient: 'linear-gradient(135deg, #fff7ed, #ffedd5)', desc: '전 세계의 무게를 떠받치고 있다고 전해지는, 끝을 알 수 없을 정도로 거대한 물고기입니다.', ability: '🌍 고유 영물 (대지의 지탱): 낚시 비용이 완전히 0원이 되며, 낚시터를 켜두는 동안 30초마다 자동으로 대어를 낚아 올립니다!' },
-    { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
+    { name: '히포캠포с', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
     { name: '익티오켄타우로스', color: '#7c3aed', bgGradient: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', desc: '상반신은 인간, 앞다리는 말, 뒷몸은 물고기 꼬리를 가진 신비로운 바다의 신들입니다.', ability: '👁️ 고유 영물 (심해의 지혜): 물고기 크기 10% 증가 보정과 함께, 미해금 영물들의 이름과 능력을 도감에서 미리 탐색하여 볼 수 있습니다!' },
     { name: '시레인 크로인', color: '#dc2626', bgGradient: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: '평소에는 은빛의 작은 물고기 형태를 하다가, 어부들을 유혹한 뒤 순식간에 고래마저 삼키는 영물입니다.', ability: '🔥 고유 영물 (심해의 약탈): 물고기를 잡을 때 일정 확률로 남의 최고 등급 물고기를 훔쳐 오며, 성공할 때마다 약탈 확률이 0.5%씩 영구 누적됩니다!' }
 ];
@@ -1001,6 +1001,8 @@ async function renderFishingView(contentArea) {
         }
     }
 
+    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
+
     let inventoryHtml = "";
     if (!fishingData.fish_inventory || Object.keys(fishingData.fish_inventory).length === 0) {
         inventoryHtml = `<p class="empty-msg" style="padding: 10px 0;">보관 중인 물고기가 없습니다. 낚시를 시작해보세요!</p>`;
@@ -1032,6 +1034,8 @@ async function renderFishingView(contentArea) {
                 let carpBadge = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? `<span style="color: #d97706; font-size: 0.7rem; font-weight: 800; background: #fef3c7; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">✨등용문 2배</span>` : ``;
                 let dagonBadge = isDagonItem ? `<span style="color: #78716c; font-size: 0.7rem; font-weight: 800; background: #f5f5f4; border: 1px solid #d6d3d1; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">[다곤]</span>` : ``;
                 
+                let makaraFeedBtn = hasMakara ? `<button class="btn-back" onclick="feedMakara('${fishName}', ${index})" style="font-size: 0.8rem; padding: 6px 10px; background: #ecfdf5; color: #047857; font-weight: 700;">🌊 마카라 주기</button>` : ``;
+
                 inventoryHtml += `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
                         <div>
@@ -1039,7 +1043,7 @@ async function renderFishingView(contentArea) {
                             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">판매가: <b style="color: #16a34a;">${finalPrice.toLocaleString()}원</b></div>
                         </div>
                         <div style="display: flex; gap: 6px;">
-                            <button class="btn-back" onclick="feedMakara('${fishName}', ${index})" style="font-size: 0.8rem; padding: 6px 10px; background: #ecfdf5; color: #047857; font-weight: 700;">🌊 마카라 주기</button>
+                            ${makaraFeedBtn}
                             <button class="btn-back" onclick="sellFish('${fishName}', ${index})" style="font-size: 0.8rem; padding: 6px 12px; background: #dcfce7; color: #166534;">판매</button>
                         </div>
                     </div>
@@ -1111,7 +1115,17 @@ async function renderFishingView(contentArea) {
         }
     });
 
-    let makaraCurrentBonus = (fishingData.makara_bonus_chance || 0).toFixed(2);
+    let makaraBoosterHtml = "";
+    if (hasMakara) {
+        let makaraCurrentBonus = (fishingData.makara_bonus_chance || 0).toFixed(2);
+        makaraBoosterHtml = `
+            <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                <span style="color: #047857; font-weight: 700;">🌊 마카라 신화 확률 부스터:</span>
+                <span style="color: #065f46; font-weight: 900; font-size: 1rem;">+${makaraCurrentBonus}% 가산 중</span>
+            </div>
+        `;
+    }
+
     let alertBoxDisplay = floatingAlertText ? 'block' : 'none';
 
     contentArea.innerHTML = `
@@ -1136,10 +1150,7 @@ async function renderFishingView(contentArea) {
                 </div>
             </div>
 
-            <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
-                <span style="color: #047857; font-weight: 700;">🌊 마카라 신화 확률 부스터:</span>
-                <span style="color: #065f46; font-weight: 900; font-size: 1rem;">+${makaraCurrentBonus}% 가산 중</span>
-            </div>
+            ${makaraBoosterHtml}
 
             <div style="position: relative; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                 <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 14px 24px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; z-index: 10; border: 2px solid #38bdf8;">${floatingAlertText}</div>
@@ -1314,7 +1325,7 @@ function executeCatchLogic() {
             fishingData.unlocked_beasts.push(beast.name);
             saveFishingData();
             showFloatingAlert(`✨🏛️ [전설의 영물 발견!] 신비로운 수호신 "${beast.name}"을(를) 낚아 올렸습니다!`);
-            break; // 한 번에 하나의 영물만 획득
+            break; 
         }
     }
 
@@ -1322,7 +1333,10 @@ function executeCatchLogic() {
     let rodLevel = fishingData.rod_level;
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
     let baseMythicChance = (rodLevel >= 6) ? 0.01 * Math.pow(5, rodLevel - 6) : 0; 
-    let makaraBonus = fishingData.makara_bonus_chance || 0;
+    
+    // 🟢 마카라 영물을 실제로 보유하고 있을 때만 부스터 확률 적용
+    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
+    let makaraBonus = hasMakara ? (fishingData.makara_bonus_chance || 0) : 0;
     let mythicChance = baseMythicChance + makaraBonus;
 
     let heroChance = 3 + (rodLevel * 1.8); 
@@ -1332,7 +1346,7 @@ function executeCatchLogic() {
     if (rand < mythicChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '신화');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
-        fishingData.makara_bonus_chance = 0;
+        if (hasMakara) fishingData.makara_bonus_chance = 0; // 마카라 보유 시에만 신화 획득 시 초기화
     } else if (rand < mythicChance + legendaryChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '전설');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
@@ -1393,6 +1407,12 @@ function executeCatchLogic() {
 }
 
 async function feedMakara(fishName, index) {
+    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
+    if (!hasMakara) {
+        alert("마카라 영물을 해금해야 물고기를 줄 수 있습니다!");
+        return;
+    }
+
     let currentScroll = window.scrollY;
     let sizesArr = fishingData.fish_inventory[fishName];
     if (!sizesArr || sizesArr[index] === undefined) return;
