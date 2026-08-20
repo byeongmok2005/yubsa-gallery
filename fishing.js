@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (길냥이 물고기 획득 연동 및 지원금 제거 버전)
+// fishing.js - 심해 낚시터 (길냥이 물고기 낚싯대 1회 비용 연동 버전)
 
 let fishingData = { 
     money: 1000, 
@@ -89,7 +89,7 @@ const MYTHICAL_BEASTS = [
     { name: '바하무트', color: '#b45309', bgGradient: 'linear-gradient(135deg, #fff7ed, #ffedd5)', desc: '전 세계의 무게를 떠받치고 있다고 전해지는, 끝을 알 수 없을 정도로 거대한 물고기입니다.', ability: '🌍 고유 영물 (대지의 지탱): 낚시 비용이 완전히 0원이 되며, 낚시터를 켜두는 동안 30초마다 자동으로 대어를 낚아 올립니다!' },
     { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
     { name: '익티오켄타우로스', color: '#7c3aed', bgGradient: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', desc: '상반신은 인간, 앞다리는 말, 뒷몸은 물고기 꼬리를 가진 신비로운 바다의 신들입니다.', ability: '👁️ 고유 영물 (심해의 지혜): 물고기 크기 10% 증가 보정과 함께, 미해금 영물들의 이름과 능력을 도감에서 미리 탐색하여 볼 수 있습니다!' },
-    { name: '시레인 크로인', color: '#dc2626', bgGradient: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: '평소에는 은빛의 작은 물고기 형태를 하다가, 어부들을 유혹한 뒤 순식간에 고래마저 삼키는 영물입니다.', ability: '🔥 고유 영물 (심해의 약탈): 물고기를 잡을 때 일정 확률로 남의 최고 등급 물고기를 훔쳐 오며, 성공할 때마다 약탈 확률이 0.5%씩 영구 누적됩니다!' }
+    { name: '시레인 크로인', color: '#dc2626', bgGradient: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: '평소에는 은빛의 작은 물고기 형태를 하다가, 어부들을 유혹한 뒤 순식간에 고래마저 삼키는 영물입니다.', ability: '🔥 고유 영물 (심해의 약탈): 물고기를 잡을 때 일정 확률로 남의 최고 등급 물고기마저 훔쳐 오며, 성공할 때마다 약탈 확률이 0.5%씩 영구 누적됩니다!' }
 ];
 
 const GRADE_PRIORITY = { '특수': 7, '영물': 6, '신화': 5, '전설': 4, '영웅': 3, '희귀': 2, '일반': 1 };
@@ -621,7 +621,8 @@ function openTradeModal() {
                 sizes.forEach((item) => {
                     let sz = parseFishItem(item).size;
                     let valStr = `${fishName}:${sz}`;
-                    myInventoryOptions += `<option value="${valStr}">🐟 ${fishName} (${sz}cm)</option>`;
+                    let labelName = fishName === '길냥이의 물고기' ? '길냥이의 물고기 (1회 비용)' : `${fishName} (${sz}cm)`;
+                    myInventoryOptions += `<option value="${valStr}">🐟 ${labelName}</option>`;
                 });
             }
         }
@@ -745,7 +746,8 @@ async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
                 sizes.forEach((item) => {
                     let sz = parseFishItem(item).size;
                     let valStr = `${fishName}:${sz}`;
-                    myInventoryOptions += `<option value="${valStr}">🐟 ${fishName} (${sz}cm)</option>`;
+                    let labelName = fishName === '길냥이의 물고기' ? '길냥이의 물고기 (1회 비용)' : `${fishName} (${sz}cm)`;
+                    myInventoryOptions += `<option value="${valStr}">🐟 ${labelName}</option>`;
                 });
             }
         }
@@ -984,7 +986,7 @@ async function renderFishingView(contentArea) {
     if (isBankrupt) {
         statusText = '소지금이 부족하여 낚시를 할 수 없습니다... 길냥이에게 물고기를 뺏어오세요!';
         statusColor = '#d97706';
-        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900;">🐱 길냥이에게 물고기 뺏기 (기회)</button>`;
+        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900;">🐱 길냥이에게 낚싯대 1회 비용 뺏기 (기회)</button>`;
     } else {
         if (fishingStep === 'ready') {
             if (hasBahamut) {
@@ -1028,7 +1030,7 @@ async function renderFishingView(contentArea) {
                 if (fishName === '붕') {
                     calculatedPrice = 1000000;
                 } else if (fishName === '길냥이의 물고기') {
-                    calculatedPrice = size;
+                    calculatedPrice = size; // size holds the rod cost amount
                 } else {
                     let baseUnit = baseFish ? baseFish.basePrice : 20;
                     calculatedPrice = Math.floor(baseUnit * (size / 10));
@@ -1040,10 +1042,12 @@ async function renderFishingView(contentArea) {
                 
                 let makaraFeedBtn = hasMakara ? `<button class="btn-back" onclick="feedMakara('${fishName}', ${index})" style="font-size: 0.8rem; padding: 6px 10px; background: #ecfdf5; color: #047857; font-weight: 700;">🌊 마카라 주기</button>` : ``;
 
+                let itemDisplayName = fishName === '길냥이의 물고기' ? `길냥이의 물고기 (낚싯대 1회 비용)` : `${fishName} (${size}cm)`;
+
                 inventoryHtml += `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
                         <div>
-                            <span style="font-weight: 700; font-size: 0.95rem;">${icon} ${fishName} (${size}cm) <span style="font-size: 0.75rem; color: ${color}; font-weight: 800;">[${grade}]</span>${dagonBadge}${carpBadge}</span>
+                            <span style="font-weight: 700; font-size: 0.95rem;">${icon} ${itemDisplayName} <span style="font-size: 0.75rem; color: ${color}; font-weight: 800;">[${grade}]</span>${dagonBadge}${carpBadge}</span>
                             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">판매가: <b style="color: #16a34a;">${finalPrice.toLocaleString()}원</b></div>
                         </div>
                         <div style="display: flex; gap: 6px;">
@@ -1442,11 +1446,19 @@ async function sellFish(fishName, index) {
 
     let parsed = parseFishItem(sizesArr[index]);
     let targetSize = parsed.size; 
-    let baseFish = FISH_DATABASE.find(f => f.name === fishName);
-    let baseUnit = baseFish ? baseFish.basePrice : 20;
-    let calculatedBase = Math.floor(baseUnit * (targetSize / 10));
+    let sellPrice = 0;
     let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
-    let sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase; 
+
+    if (fishName === '붕') {
+        sellPrice = 1000000;
+    } else if (fishName === '길냥이의 물고기') {
+        sellPrice = targetSize; // targetSize holds the rod cost amount
+    } else {
+        let baseFish = FISH_DATABASE.find(f => f.name === fishName);
+        let baseUnit = baseFish ? baseFish.basePrice : 20;
+        let calculatedBase = Math.floor(baseUnit * (targetSize / 10));
+        sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase;
+    }
 
     sizesArr.splice(index, 1);
     if (sizesArr.length === 0) delete fishingData.fish_inventory[fishName];
@@ -1471,8 +1483,14 @@ async function sellAllFish() {
 
         sizesArr.forEach(item => {
             let parsed = parseFishItem(item);
-            let calculatedBase = Math.floor(baseUnit * (parsed.size / 10));
-            totalSell += hasCarp ? calculatedBase * 2 : calculatedBase;
+            if (fishName === '붕') {
+                totalSell += 1000000;
+            } else if (fishName === '길냥이의 물고기') {
+                totalSell += parsed.size;
+            } else {
+                let calculatedBase = Math.floor(baseUnit * (parsed.size / 10));
+                totalSell += hasCarp ? calculatedBase * 2 : calculatedBase;
+            }
         });
     }
 
@@ -1506,18 +1524,20 @@ async function upgradeRod() {
     window.scrollTo(0, currentScroll);
 }
 
-// 🐱 파산 시 길냥이에게 물고기를 뺏어오는 구제 시스템 (기회 버튼 연동)
+// 🐱 파산 시 현재 낚싯대 1회 던지기 비용 가치의 '길냥이의 물고기' 획득
 async function claimChance() {
     let currentScroll = window.scrollY;
-    let catFishSize = Math.floor(Math.random() * 41) + 30; // 30 ~ 70cm 랜덤 크기
+    let currentRod = ROD_TIERS[fishingData.rod_level];
+    let rodCost = currentRod.cost; // 현재 낚싯대 1회 던지기 비용
 
     if (!fishingData.fish_inventory['길냥이의 물고기']) {
         fishingData.fish_inventory['길냥이의 물고기'] = [];
     }
-    fishingData.fish_inventory['길냥이의 물고기'].push({ size: catFishSize, dagon: false });
+    // size에 1회 던지기 비용을 담아 판매 시 해당 금액만큼 획득하도록 설정
+    fishingData.fish_inventory['길냥이의 물고기'].push({ size: rodCost, dagon: false });
 
     await saveFishingData();
-    showFloatingAlert(`🐱 길냥이에게 물고기(${catFishSize}cm)를 뺏어왔습니다! 보관고를 확인하세요.`);
+    showFloatingAlert(`🐱 길냥이에게 낚싯대 1회 비용(${rodCost.toLocaleString()}원)어치 물고기를 뺏어왔습니다!`);
     
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
