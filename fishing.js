@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (실시간 폴링 자동 감지 및 즉시 반영 최종 완성본)
+// fishing.js - 심해 낚시터 (실시간 거래 완료 팝업, 잔류 배너 제거 및 즉시 취소 처리 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -17,7 +17,7 @@ let fishingData = {
 
 let fishingStep = 'ready'; 
 let autoFishingInterval = null; 
-let tradePollingInterval = null; // 실시간 폴링 타이머
+let tradePollingInterval = null; 
 let biteTimeout = null;
 let biteTimer = null; 
 let floatingAlertText = ""; 
@@ -165,7 +165,7 @@ async function initFishing() {
     hasUsedChance = false;
 
     startBahamutAutoFishing();
-    startTradePolling(); // 실시간 제안 감지 폴링 시작
+    startTradePolling();
 }
 
 async function saveFishingData() {
@@ -202,31 +202,12 @@ async function saveFishingData() {
     }
 }
 
-// 2초마다 백그라운드에서 제안 상태 변화 및 수신 여부를 자동 감지
+// 실시간 폴링 (거래 상태 변경 자동 감지)
 function startTradePolling() {
     if (tradePollingInterval) clearInterval(tradePollingInterval);
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
-        // 1. 나에게 온 제안이 있는지 또는 내가 보낸 제안의 상태가 바뀌었는지 체크
-        const { data: myRow } = await supabaseClient
-            .from('user_fishing_data')
-            .select('trade_request')
-            .eq('nickname', currentUser)
-            .maybeSingle();
-
-        if (myRow && myRow.trade_request) {
-            let req = myRow.trade_request;
-            if (req.target === currentUser && req.status === 'waiting') {
-                // 새로운 제안이 도착함 -> 만약 직거래 모달이 안 열려있다면 안내 표시 가능
-                let banner = document.getElementById('tradeStatusBanner');
-                if (banner && !document.getElementById('dmTradeModal')) {
-                    banner.innerHTML = `📬 [${req.sender}]님으로부터 직거래 제안이 도착했습니다! (다곤 상세에서 확인)`;
-                }
-            }
-        }
-
-        // 2. 내가 보낸 제안의 상태 변화 감지 (상대방이 수락/거절/완료했는지)
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
             for (let row of allRows) {
@@ -245,23 +226,48 @@ function startTradePolling() {
                         let contentArea = document.getElementById("contentArea");
                         if (contentArea) renderFishingView(contentArea);
 
-                        alert(`🎉 [직거래 성사 완료]\n\n📤 [내가 준 품목]\n- 물고기: ${myGaveFish}\n- 소지금: ${myGaveMoney}\n\n📥 [내가 받은 품목]\n- 물고기: ${myGotFish}\n- 소지금: ${myGotMoney}`);
+                        showTradeResultPopup(myGaveFish, myGaveMoney, myGotFish, myGotMoney);
                         return;
                     } else if (req.status === 'rejected') {
                         let target = req.target;
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        
+                        // 창 닫기 및 갱신
+                        closeAllModals();
                         await initFishing();
 
                         let contentArea = document.getElementById("contentArea");
                         if (contentArea) renderFishingView(contentArea);
 
-                        alert(`❌ [${target}] 님께서 직거래 제안을 거절했습니다.`);
+                        showFloatingAlert(`❌ [${target}] 님께서 직거래 제안을 거절했습니다.`);
                         return;
                     }
                 }
             }
         }
     }, 2000);
+}
+
+// 화면 중앙에 직거래 결과 팝업 표시
+function showTradeResultPopup(gaveFish, gaveMoney, gotFish, gotMoney) {
+    closeAllModals();
+    let popupHtml = `
+        <div id="tradeResultModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 4000;">
+            <div style="background: white; width: 90%; max-width: 380px; padding: 24px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: center; border-top: 6px solid #16a34a;">
+                <h3 style="margin-top: 0; color: #16a34a; font-size: 1.2rem; font-weight: 900;">🎉 직거래 교환 완료!</h3>
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin: 14px 0; text-align: left; font-size: 0.9rem;">
+                    <div style="margin-bottom: 8px; color: #dc2626; font-weight: 700;">📤 [내가 준 품목]</div>
+                    <div style="color: #334155; margin-bottom: 2px;">- 물고기: <b>${gaveFish}</b></div>
+                    <div style="color: #334155; margin-bottom: 12px;">- 소지금: <b>${gaveMoney}</b></div>
+                    <div style="margin-bottom: 4px; color: #16a34a; font-weight: 700;">📥 [내가 받은 품목]</div>
+                    <div style="color: #334155; margin-bottom: 2px;">- 물고기: <b>${gotFish}</b></div>
+                    <div style="color: #334155;">- 소지금: <b>${gotMoney}</b></div>
+                </div>
+                <button onclick="document.getElementById('tradeResultModal').remove();" style="width: 100%; background: #16a34a; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 900; cursor: pointer;">확인</button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', popupHtml);
 }
 
 function startBahamutAutoFishing() {
@@ -308,7 +314,7 @@ async function toggleBahamutAuto() {
 }
 
 function closeAllModals() {
-    let modals = document.querySelectorAll('#beastModal, #dmTradeModal, #inboxModal, #tradeRoomModal, #dagonContractModal, #curseModal, #sirenChoiceModal');
+    let modals = document.querySelectorAll('#beastModal, #dmTradeModal, #inboxModal, #tradeRoomModal, #dagonContractModal, #curseModal, #sirenChoiceModal, #tradeResultModal');
     modals.forEach(m => m.remove());
 }
 
@@ -531,6 +537,7 @@ async function cancelMyTradeRequest() {
         });
     }
 
+    closeAllModals();
     let currentScroll = window.scrollY;
     let contentArea = document.getElementById("contentArea");
     if (contentArea) renderFishingView(contentArea);
@@ -552,8 +559,8 @@ async function rejectIncomingTrade() {
         updated_at: new Date()
     }).eq('nickname', currentUser);
 
-    alert("제안을 거절했습니다.");
-    openTradeModal();
+    closeAllModals();
+    showFloatingAlert("❌ 제안을 거절했습니다.");
 }
 
 async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
@@ -741,7 +748,7 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     if (contentArea) renderFishingView(contentArea);
     window.scrollTo(0, currentScroll);
 
-    alert(`🎉 직거래 교환 완료!\n\n📤 [내가 준 품목]\n- 물고기: ${gaveFishStr}\n- 소지금: ${gaveMoneyStr}\n\n📥 [내가 받은 품목]\n- 물고기: ${gotFishStr}\n- 소지금: ${gotMoneyStr}`);
+    showTradeResultPopup(gaveFishStr, gaveMoneyStr, gotFishStr, gotMoneyStr);
 }
 
 // 낚시터 렌더링 뷰
@@ -757,26 +764,32 @@ async function renderFishingView(contentArea) {
     try {
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
+            let hasActiveWait = false;
             for (let row of allRows) {
                 if (row.trade_request && row.trade_request.sender === currentUser) {
                     let target = row.trade_request.target;
                     let reqStatus = row.trade_request.status;
 
                     if (reqStatus === 'picking') {
+                        hasActiveWait = true;
                         tradeStatusBanner = `
                             <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
                                 ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
                             </div>
                         `;
-                    } else {
+                    } else if (reqStatus === 'waiting') {
+                        hasActiveWait = true;
                         tradeStatusBanner = `
                             <div style="background: #eff6ff; border: 2px solid #3b82f6; color: #1d4ed8; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center; display: flex; justify-content: space-between; align-items: center;">
-                                <span id="tradeStatusBanner">⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
+                                <span>⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
                                 <button onclick="cancelMyTradeRequest()" style="background: #dc2626; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">취소</button>
                             </div>
                         `;
                     }
                 }
+            }
+            if (!hasActiveWait) {
+                tradeStatusBanner = "";
             }
         }
     } catch (e) {}
