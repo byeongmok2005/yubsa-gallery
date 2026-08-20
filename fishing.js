@@ -58,7 +58,7 @@ const FISH_DATABASE = [
     { name: '황돔', grade: '일반', minSize: 0.6, maxSize: 1.1, basePrice: 36, color: '#64748b' },
     { name: '자리돔', grade: '일반', minSize: 0.3, maxSize: 0.6, basePrice: 16, color: '#64748b' },
     { name: '벤자리', grade: '일반', minSize: 0.6, maxSize: 1.4, basePrice: 39, color: '#64748b' },
-    { name: '독가치', grade: '일반', minSize: 0.5, maxSize: 1.0, basePrice: 24, color: '#64748b' },
+    { name: '독가시치', grade: '일반', minSize: 0.5, maxSize: 1.0, basePrice: 24, color: '#64748b' },
     { name: '망상어', grade: '일반', minSize: 0.4, maxSize: 0.8, basePrice: 19, color: '#64748b' },
     { name: '까나리', grade: '일반', minSize: 0.3, maxSize: 0.6, basePrice: 11, color: '#64748b' },
     { name: '꼼치', grade: '일반', minSize: 0.6, maxSize: 1.6, basePrice: 29, color: '#64748b' },
