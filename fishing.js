@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (실시간 거래 완료 팝업, 잔류 배너 제거 및 즉시 취소 처리 최종 완성본)
+// fishing.js - 심해 낚시터 (직거래 잔류 요청 완벽 제거 및 양방향 동기화 최종 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -202,7 +202,7 @@ async function saveFishingData() {
     }
 }
 
-// 실시간 폴링 (거래 상태 변경 자동 감지)
+// 실시간 폴링 (거래 상태 변경 자동 감지 및 잔류 요청 청소)
 function startTradePolling() {
     if (tradePollingInterval) clearInterval(tradePollingInterval);
     tradePollingInterval = setInterval(async () => {
@@ -211,6 +211,7 @@ function startTradePolling() {
         const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
         if (allRows) {
             for (let row of allRows) {
+                // 1. 내가 보낸 제안이 완료되었거나 거절된 경우 감지
                 if (row.trade_request && row.trade_request.sender === currentUser) {
                     let req = row.trade_request;
                     if (req.status === 'completed') {
@@ -220,7 +221,11 @@ function startTradePolling() {
                         let myGotFish = tInfo.gaveFish ? tInfo.gaveFish.replace(':', ' (') + 'cm)' : '물고기 없음';
                         let myGotMoney = (tInfo.gaveMoney || 0).toLocaleString() + '원';
 
+                        // 상대방 DB에 남아있는 요청 흔적도 완전히 삭제
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        // 내 로컬 상태와 DB도 완전히 청소
+                        fishingData.trade_request = null;
+                        await saveFishingData();
                         await initFishing();
                         
                         let contentArea = document.getElementById("contentArea");
@@ -230,9 +235,11 @@ function startTradePolling() {
                         return;
                     } else if (req.status === 'rejected') {
                         let target = req.target;
+                        // 상대방 DB 및 내 DB 모두 요청 흔적 완벽 제거
                         await supabaseClient.from('user_fishing_data').update({ trade_request: null }).eq('nickname', row.nickname);
+                        fishingData.trade_request = null;
+                        await saveFishingData();
                         
-                        // 창 닫기 및 갱신
                         closeAllModals();
                         await initFishing();
 
@@ -511,6 +518,11 @@ async function sendDmTradeRequest() {
         status: 'waiting'
     };
 
+    // 내 로컬 상태와 DB에 동시에 저장
+    fishingData.trade_request = tradeDataJson;
+    await saveFishingData();
+
+    // 상대방 DB에도 제안 전달
     await supabaseClient.from('user_fishing_data').update({
         trade_request: tradeDataJson,
         updated_at: new Date()
@@ -525,6 +537,7 @@ async function sendDmTradeRequest() {
 }
 
 async function cancelMyTradeRequest() {
+    // 상대방들의 DB에서 내가 보낸 요청을 찾아 모두 제거
     const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
     if (allRows) {
         allRows.forEach(async (row) => {
@@ -537,6 +550,10 @@ async function cancelMyTradeRequest() {
         });
     }
 
+    // 내 로컬 및 DB에서도 즉시 제거
+    fishingData.trade_request = null;
+    await saveFishingData();
+
     closeAllModals();
     let currentScroll = window.scrollY;
     let contentArea = document.getElementById("contentArea");
@@ -548,19 +565,24 @@ async function rejectIncomingTrade() {
     const { data: myRow } = await supabaseClient.from('user_fishing_data').select('trade_request').eq('nickname', currentUser).maybeSingle();
     if (myRow && myRow.trade_request) {
         let senderName = myRow.trade_request.sender;
+        // 보낸 사람의 DB 행에 거절 상태 전송
         await supabaseClient.from('user_fishing_data').update({
             trade_request: { ...myRow.trade_request, status: 'rejected' },
             updated_at: new Date()
         }).eq('nickname', senderName);
     }
 
-    await supabaseClient.from('user_fishing_data').update({
-        trade_request: null,
-        updated_at: new Date()
-    }).eq('nickname', currentUser);
+    // 내 DB에서도 요청 제거
+    fishingData.trade_request = null;
+    await saveFishingData();
 
     closeAllModals();
     showFloatingAlert("❌ 제안을 거절했습니다.");
+    
+    let currentScroll = window.scrollY;
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
 }
 
 async function openTradeRoom(partnerName, partnerFish, partnerMoney) {
@@ -714,7 +736,7 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     fishingData.money = fishingData.money - mySendMoney + partnerMoney;
     partnerRow.money = (partnerRow.money || 0) - partnerMoney + mySendMoney;
 
-    // 4. DB 반영
+    // 4. DB 반영 (완료 상태 전달하여 상대방 폴링에서 감지 후 정리되도록 함)
     let completedTradeInfo = {
         status: 'completed',
         sender: partnerName,
@@ -733,6 +755,7 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
         updated_at: new Date()
     }).eq('nickname', partnerName);
 
+    // 내 로컬 및 DB에서도 요청 즉시 초기화
     fishingData.trade_request = null;
     await saveFishingData();
 
@@ -761,38 +784,24 @@ async function renderFishingView(contentArea) {
     let statusColor = "#0369a1";
 
     let tradeStatusBanner = "";
-    try {
-        const { data: allRows } = await supabaseClient.from('user_fishing_data').select('nickname, trade_request');
-        if (allRows) {
-            let hasActiveWait = false;
-            for (let row of allRows) {
-                if (row.trade_request && row.trade_request.sender === currentUser) {
-                    let target = row.trade_request.target;
-                    let reqStatus = row.trade_request.status;
-
-                    if (reqStatus === 'picking') {
-                        hasActiveWait = true;
-                        tradeStatusBanner = `
-                            <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                                ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
-                            </div>
-                        `;
-                    } else if (reqStatus === 'waiting') {
-                        hasActiveWait = true;
-                        tradeStatusBanner = `
-                            <div style="background: #eff6ff; border: 2px solid #3b82f6; color: #1d4ed8; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center; display: flex; justify-content: space-between; align-items: center;">
-                                <span>⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
-                                <button onclick="cancelMyTradeRequest()" style="background: #dc2626; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">취소</button>
-                            </div>
-                        `;
-                    }
-                }
-            }
-            if (!hasActiveWait) {
-                tradeStatusBanner = "";
-            }
+    if (fishingData.trade_request && fishingData.trade_request.status) {
+        let req = fishingData.trade_request;
+        let target = req.target;
+        if (req.status === 'picking') {
+            tradeStatusBanner = `
+                <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
+                </div>
+            `;
+        } else if (req.status === 'waiting') {
+            tradeStatusBanner = `
+                <div style="background: #eff6ff; border: 2px solid #3b82f6; color: #1d4ed8; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center; display: flex; justify-content: space-between; align-items: center;">
+                    <span>⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
+                    <button onclick="cancelMyTradeRequest()" style="background: #dc2626; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">취소</button>
+                </div>
+            `;
         }
-    } catch (e) {}
+    }
 
     let curseWarningBanner = "";
     let hasMatsuya = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마츠야');
