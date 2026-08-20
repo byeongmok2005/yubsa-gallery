@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (물고기 크기 단위 '자' 적용 버전)
+// fishing.js - 심해 낚시터 (태초 등급, 11·12단계 조 단위 낚싯대, 은화 무한 상승 및 나침반 24레벨 만렙 적용 버전)
 
 let fishingData = { 
     money: 1000, 
@@ -9,10 +9,15 @@ let fishingData = {
     cursed_target: null,
     curse_remaining_count: 0,
     makara_bonus_chance: 0,
+    makara_primordial_bonus: 0,
     siren_streak: 0,
     dagon_partner: null,
     is_dagon_mutual: false,
-    trade_request: null
+    trade_request: null,
+    silver_coins: 0,
+    silver_coin_level: 0,
+    compass_fragments: 0,
+    compass_level: 0
 };
 
 let fishingStep = 'ready'; 
@@ -24,6 +29,8 @@ let floatingAlertText = "";
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
 let bahamutAutoActive = true; 
 
+const MAX_COMPASS_LEVEL = 24; // 나침반 최대 레벨 24 (은화는 무한 상승)
+
 const ROD_TIERS = {
     1: { name: '🪵 나무 낚시대', price: 0, cost: 80 },
     2: { name: '🎣 튼튼한 대나무 낚시대', price: 5000, cost: 200 },
@@ -34,7 +41,9 @@ const ROD_TIERS = {
     7: { name: '🔥 용황의 숨결 낚시대', price: 5000000, cost: 8000 },
     8: { name: '💎 아틀란티스 헤리티지', price: 25000000, cost: 18000 },
     9: { name: '👑 코스믹 차원 낚시대', price: 120000000, cost: 40000 },
-    10: { name: '🌟 우주 신들의 낚시대 (최종)', price: 600000000, cost: 100000 }
+    10: { name: '🌟 우주 신들의 낚시대', price: 600000000, cost: 100000 },
+    11: { name: '🌌 차원 공허의 시공간 낚시대', price: 5000000000000, cost: 500000 },
+    12: { name: '⚛️ 태초의 창조주 오메가 낚시대 (최종)', price: 100000000000000, cost: 2500000 }
 };
 
 const FISH_DATABASE = [
@@ -74,17 +83,17 @@ const FISH_DATABASE = [
     { name: '광어', grade: '희귀', minSize: 1.3, maxSize: 2.6, basePrice: 95, color: '#16a34a' },
     { name: '우럭', grade: '희귀', minSize: 1.0, maxSize: 2.0, basePrice: 110, color: '#16a34a' },
     { name: '참돔', grade: '희귀', minSize: 1.5, maxSize: 3.0, basePrice: 150, color: '#16a34a' },
-    { name: '문어', grade: '희귀', minSize: 1.6, maxSize: 4.0, basePrice: 200, color: '#16a34a' },
+    { name: '문어', grade: '희귀', minSize: 1.6, maxSize: 3.5, basePrice: 200, color: '#16a34a' },
     { name: '농어', grade: '희귀', minSize: 1.6, maxSize: 3.3, basePrice: 130, color: '#16a34a' },
     { name: '돌돔', grade: '희귀', minSize: 1.2, maxSize: 2.3, basePrice: 160, color: '#16a34a' },
     { name: '갑오징어', grade: '희귀', minSize: 0.8, maxSize: 1.8, basePrice: 120, color: '#16a34a' },
     { name: '감성돔', grade: '희귀', minSize: 1.3, maxSize: 2.5, basePrice: 175, color: '#16a34a' },
     { name: '능성어', grade: '희귀', minSize: 1.5, maxSize: 3.1, basePrice: 220, color: '#16a34a' },
-    { name: '민어', grade: '희귀', minSize: 2.0, maxSize: 4.3, basePrice: 280, color: '#16a34a' },
+    { name: '민어', grade: '희귀', minSize: 2.0, maxSize: 4.0, basePrice: 280, color: '#16a34a' },
     { name: '옥돔', grade: '희귀', minSize: 1.0, maxSize: 1.8, basePrice: 140, color: '#16a34a' },
     { name: '붉은옥돔', grade: '희귀', minSize: 1.1, maxSize: 1.9, basePrice: 155, color: '#16a34a' },
-    { name: '갈치', grade: '희귀', minSize: 2.6, maxSize: 5.3, basePrice: 165, color: '#16a34a' },
-    { name: '하모(갯장어)', grade: '희귀', minSize: 1.6, maxSize: 3.6, basePrice: 190, color: '#16a34a' },
+    { name: '갈치', grade: '희귀', minSize: 2.0, maxSize: 4.5, basePrice: 165, color: '#16a34a' },
+    { name: '하모(갯장어)', grade: '희귀', minSize: 1.6, maxSize: 3.5, basePrice: 190, color: '#16a34a' },
     { name: '군평선이', grade: '희귀', minSize: 0.7, maxSize: 1.3, basePrice: 100, color: '#16a34a' },
     { name: '달고기', grade: '희귀', minSize: 0.8, maxSize: 1.6, basePrice: 125, color: '#16a34a' },
     { name: '놀래기(대형)', grade: '희귀', minSize: 1.0, maxSize: 1.8, basePrice: 115, color: '#16a34a' },
@@ -92,8 +101,8 @@ const FISH_DATABASE = [
     { name: '점성어', grade: '희귀', minSize: 1.6, maxSize: 3.3, basePrice: 180, color: '#16a34a' },
     { name: '홍감성돔', grade: '희귀', minSize: 1.3, maxSize: 2.4, basePrice: 185, color: '#16a34a' },
     { name: '벤자리(대형)', grade: '희귀', minSize: 1.2, maxSize: 2.1, basePrice: 145, color: '#16a34a' },
-    { name: '참문어', grade: '희귀', minSize: 1.5, maxSize: 3.6, basePrice: 210, color: '#16a34a' },
-    { name: '돌문어', grade: '희귀', minSize: 1.3, maxSize: 3.1, basePrice: 195, color: '#16a34a' },
+    { name: '참문어', grade: '희귀', minSize: 1.5, maxSize: 3.5, basePrice: 210, color: '#16a34a' },
+    { name: '돌문어', grade: '희귀', minSize: 1.3, maxSize: 3.0, basePrice: 195, color: '#16a34a' },
     { name: '꽃게', grade: '희귀', minSize: 0.5, maxSize: 1.0, basePrice: 130, color: '#16a34a' },
     { name: '대왕킹크랩', grade: '희귀', minSize: 1.3, maxSize: 3.0, basePrice: 300, color: '#16a34a' },
     { name: '대게', grade: '희귀', minSize: 1.0, maxSize: 2.3, basePrice: 250, color: '#16a34a' },
@@ -103,80 +112,110 @@ const FISH_DATABASE = [
     { name: '참가자미', grade: '희귀', minSize: 1.0, maxSize: 2.0, basePrice: 135, color: '#16a34a' },
 
     // --- 영웅 어류 (Heroic) ---
-    { name: '방어', grade: '영웅', minSize: 2.6, maxSize: 5.0, basePrice: 450, color: '#2563eb' },
-    { name: '참치', grade: '영웅', minSize: 4.0, maxSize: 8.3, basePrice: 750, color: '#2563eb' },
-    { name: '황새치', grade: '영웅', minSize: 5.0, maxSize: 10.0, basePrice: 1100, color: '#2563eb' },
-    { name: '청상아리', grade: '영웅', minSize: 6.6, maxSize: 13.3, basePrice: 1600, color: '#2563eb' },
-    { name: '다금바리', grade: '영웅', minSize: 2.3, maxSize: 4.3, basePrice: 850, color: '#2563eb' },
-    { name: '대왕문어', grade: '영웅', minSize: 5.0, maxSize: 11.6, basePrice: 1300, color: '#2563eb' },
-    { name: '흑기흉상어', grade: '영웅', minSize: 6.0, maxSize: 12.6, basePrice: 1450, color: '#2563eb' },
-    { name: '홍어', grade: '영웅', minSize: 3.3, maxSize: 7.3, basePrice: 900, color: '#2563eb' },
-    { name: '부시리', grade: '영웅', minSize: 3.0, maxSize: 5.6, basePrice: 520, color: '#2563eb' },
-    { name: '청새치', grade: '영웅', minSize: 5.3, maxSize: 11.3, basePrice: 1250, color: '#2563eb' },
-    { name: '백새치', grade: '영웅', minSize: 5.6, maxSize: 12.0, basePrice: 1350, color: '#2563eb' },
-    { name: '만새기', grade: '영웅', minSize: 3.3, maxSize: 6.6, basePrice: 600, color: '#2563eb' },
-    { name: '귀상어', grade: '영웅', minSize: 7.0, maxSize: 14.0, basePrice: 1750, color: '#2563eb' },
-    { name: '개복치', grade: '영웅', minSize: 5.0, maxSize: 10.0, basePrice: 950, color: '#2563eb' },
-    { name: '황가자미(대형)', grade: '영웅', minSize: 2.6, maxSize: 5.3, basePrice: 550, color: '#2563eb' },
-    { name: '참다랑어', grade: '영웅', minSize: 4.6, maxSize: 9.3, basePrice: 1400, color: '#2563eb' },
-    { name: '눈다랑어', grade: '영웅', minSize: 4.0, maxSize: 8.0, basePrice: 1000, color: '#2563eb' },
-    { name: '황다랑어', grade: '영웅', minSize: 3.6, maxSize: 7.6, basePrice: 920, color: '#2563eb' },
-    { name: '점박이물범', grade: '영웅', minSize: 4.0, maxSize: 6.6, basePrice: 1650, color: '#2563eb' },
-    { name: '바다거북', grade: '영웅', minSize: 3.0, maxSize: 6.0, basePrice: 1150, color: '#2563eb' },
-    { name: '대왕가오리', grade: '영웅', minSize: 6.0, maxSize: 11.6, basePrice: 1500, color: '#2563eb' },
-    { name: '쥐가오리', grade: '영웅', minSize: 6.6, maxSize: 13.3, basePrice: 1800, color: '#2563eb' },
-    { name: '노랑가오리', grade: '영웅', minSize: 3.3, maxSize: 7.0, basePrice: 700, color: '#2563eb' },
-    { name: '전기뱀장어(바다형)', grade: '영웅', minSize: 5.0, maxSize: 9.3, basePrice: 1100, color: '#2563eb' },
-    { name: '큰돌고래', grade: '영웅', minSize: 7.3, maxSize: 12.6, basePrice: 1900, color: '#2563eb' },
-    { name: '범고래상어(새끼)', grade: '영웅', minSize: 8.3, maxSize: 15.0, basePrice: 2200, color: '#2563eb' },
+    { name: '방어', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 450, color: '#2563eb' },
+    { name: '참치', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 750, color: '#2563eb' },
+    { name: '황새치', grade: '영웅', minSize: 3.0, maxSize: 6.5, basePrice: 1100, color: '#2563eb' },
+    { name: '청상아리', grade: '영웅', minSize: 3.5, maxSize: 7.5, basePrice: 1600, color: '#2563eb' },
+    { name: '다금바리', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 850, color: '#2563eb' },
+    { name: '대왕문어', grade: '영웅', minSize: 3.0, maxSize: 7.0, basePrice: 1300, color: '#2563eb' },
+    { name: '흑기흉상어', grade: '영웅', minSize: 3.5, maxSize: 7.5, basePrice: 1450, color: '#2563eb' },
+    { name: '홍어', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 900, color: '#2563eb' },
+    { name: '부시리', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 520, color: '#2563eb' },
+    { name: '청새치', grade: '영웅', minSize: 3.0, maxSize: 7.0, basePrice: 1250, color: '#2563eb' },
+    { name: '백새치', grade: '영웅', minSize: 3.0, maxSize: 7.0, basePrice: 1350, color: '#2563eb' },
+    { name: '만새기', grade: '영웅', minSize: 2.5, maxSize: 5.0, basePrice: 600, color: '#2563eb' },
+    { name: '귀상어', grade: '영웅', minSize: 4.0, maxSize: 8.5, basePrice: 1750, color: '#2563eb' },
+    { name: '개복치', grade: '영웅', minSize: 3.0, maxSize: 6.5, basePrice: 950, color: '#2563eb' },
+    { name: '황가자미(대형)', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 550, color: '#2563eb' },
+    { name: '참다랑어', grade: '영웅', minSize: 3.0, maxSize: 6.5, basePrice: 1400, color: '#2563eb' },
+    { name: '눈다랑어', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 1000, color: '#2563eb' },
+    { name: '황다랑어', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 920, color: '#2563eb' },
+    { name: '점박이물범', grade: '영웅', minSize: 3.0, maxSize: 6.0, basePrice: 1650, color: '#2563eb' },
+    { name: '바다거북', grade: '영웅', minSize: 2.5, maxSize: 5.0, basePrice: 1150, color: '#2563eb' },
+    { name: '대왕가오리', grade: '영웅', minSize: 3.5, maxSize: 7.5, basePrice: 1500, color: '#2563eb' },
+    { name: '쥐가오리', grade: '영웅', minSize: 3.5, maxSize: 8.0, basePrice: 1800, color: '#2563eb' },
+    { name: '노랑가오리', grade: '영웅', minSize: 2.5, maxSize: 5.0, basePrice: 700, color: '#2563eb' },
+    { name: '전기뱀장어(바다형)', grade: '영웅', minSize: 3.0, maxSize: 6.0, basePrice: 1100, color: '#2563eb' },
+    { name: '큰돌고래', grade: '영웅', minSize: 4.0, maxSize: 9.0, basePrice: 1900, color: '#2563eb' },
+    { name: '범고래상어(새끼)', grade: '영웅', minSize: 4.5, maxSize: 10.0, basePrice: 2200, color: '#2563eb' },
 
     // --- 전설 어류 (Legendary) ---
     { name: '대왕오징어', grade: '전설', minSize: 11.6, maxSize: 23.3, basePrice: 4500, color: '#9333ea' },
     { name: '심해 아귀', grade: '전설', minSize: 13.3, maxSize: 26.6, basePrice: 7000, color: '#9333ea' },
     { name: '백상아리', grade: '전설', minSize: 15.0, maxSize: 30.0, basePrice: 11000, color: '#9333ea' },
     { name: '범고래', grade: '전설', minSize: 16.6, maxSize: 33.3, basePrice: 15000, color: '#9333ea' },
-    { name: '향고래', grade: '전설', minSize: 23.3, maxSize: 46.6, basePrice: 22000, color: '#9333ea' },
+    { name: '향고래', grade: '전설', minSize: 20.0, maxSize: 40.0, basePrice: 22000, color: '#9333ea' },
     { name: '실러캔스', grade: '전설', minSize: 10.0, maxSize: 21.6, basePrice: 13500, color: '#9333ea' },
-    { name: '산갈치', grade: '전설', minSize: 13.3, maxSize: 30.0, basePrice: 9500, color: '#9333ea' },
-    { name: '고래상어', grade: '전설', minSize: 26.6, maxSize: 53.3, basePrice: 30000, color: '#9333ea' },
+    { name: '산갈치', grade: '전설', minSize: 12.0, maxSize: 25.0, basePrice: 9500, color: '#9333ea' },
+    { name: '고래상어', grade: '전설', minSize: 20.0, maxSize: 45.0, basePrice: 30000, color: '#9333ea' },
     { name: '메가마우스 상어', grade: '전설', minSize: 15.0, maxSize: 28.3, basePrice: 16000, color: '#9333ea' },
     { name: '남방검치상어', grade: '전설', minSize: 16.6, maxSize: 31.6, basePrice: 18500, color: '#9333ea' },
     { name: '콜로설 칼마르', grade: '전설', minSize: 13.3, maxSize: 30.0, basePrice: 19000, color: '#9333ea' },
     { name: '심해 흡혈오징어', grade: '전설', minSize: 6.6, maxSize: 16.6, basePrice: 6500, color: '#9333ea' },
     { name: '바다악어(거대종)', grade: '전설', minSize: 18.3, maxSize: 36.6, basePrice: 24000, color: '#9333ea' },
-    { name: '대왕고래(새끼)', grade: '전설', minSize: 30.0, maxSize: 60.0, basePrice: 35000, color: '#9333ea' },
-    { name: '북극고래', grade: '전설', minSize: 33.3, maxSize: 66.6, basePrice: 40000, color: '#9333ea' },
-    { name: '혹등고래', grade: '전설', minSize: 36.6, maxSize: 73.3, basePrice: 45000, color: '#9333ea' },
-    { name: '귀신고래', grade: '전설', minSize: 35.0, maxSize: 70.0, basePrice: 42000, color: '#9333ea' },
+    { name: '대왕고래(새끼)', grade: '전설', minSize: 25.0, maxSize: 50.0, basePrice: 35000, color: '#9333ea' },
+    { name: '북극고래', grade: '전설', minSize: 25.0, maxSize: 55.0, basePrice: 40000, color: '#9333ea' },
+    { name: '혹등고래', grade: '전설', minSize: 25.0, maxSize: 60.0, basePrice: 45000, color: '#9333ea' },
+    { name: '귀신고래', grade: '전설', minSize: 25.0, maxSize: 55.0, basePrice: 42000, color: '#9333ea' },
     { name: '뱀파이어 상어', grade: '전설', minSize: 16.0, maxSize: 30.6, basePrice: 20000, color: '#9333ea' },
     { name: '환상속의 심해 거북', grade: '전설', minSize: 20.0, maxSize: 40.0, basePrice: 25000, color: '#9333ea' },
     { name: '심해 랜턴피시 킹', grade: '전설', minSize: 11.6, maxSize: 25.0, basePrice: 12500, color: '#9333ea' },
 
-    // --- 신화 어류 (Mythical) ---
+    // --- 신화 어류 (Mythical) - 10단계 이상 등장 ---
     { name: '메갈로돈', grade: '신화', minSize: 30.0, maxSize: 60.0, basePrice: 150000, color: '#ea580c' },
-    { name: '크라켄', grade: '신화', minSize: 73.3, maxSize: 200.0, basePrice: 800000, color: '#dc2626' },
-    { name: '레비아탄', grade: '신화', minSize: 100.0, maxSize: 300.0, basePrice: 2000000, color: '#b91c1c' },
-    { name: '아스피도켈론', grade: '신화', minSize: 133.3, maxSize: 400.0, basePrice: 5000000, color: '#7f1d1d' },
-    { name: '요르문간드(심해분신)', grade: '신화', minSize: 166.6, maxSize: 500.0, basePrice: 8000000, color: '#450a0a' },
-    { name: '아스파스(고대 심해 군주)', grade: '신화', minSize: 150.0, maxSize: 433.3, basePrice: 6500000, color: '#581c87' },
-    { name: '카이토스(원시 해수)', grade: '신화', minSize: 160.0, maxSize: 466.6, basePrice: 7500000, color: '#3b0764' },
-    { name: '세계수의 심해 가디언', grade: '신화', minSize: 183.3, maxSize: 533.3, basePrice: 10000000, color: '#1e1b4b' }
+    { name: '크라켄', grade: '신화', minSize: 50.0, maxSize: 120.0, basePrice: 800000, color: '#dc2626' },
+    { name: '레비아탄', grade: '신화', minSize: 60.0, maxSize: 150.0, basePrice: 2000000, color: '#b91c1c' },
+    { name: '아스피도켈론', grade: '신화', minSize: 70.0, maxSize: 180.0, basePrice: 5000000, color: '#7f1d1d' },
+    { name: '요르문간드(심해분신)', grade: '신화', minSize: 80.0, maxSize: 200.0, basePrice: 8000000, color: '#450a0a' },
+    { name: '아스파스(고대 심해 군주)', grade: '신화', minSize: 75.0, maxSize: 170.0, basePrice: 6500000, color: '#581c87' },
+    { name: '카이토스(원시 해수)', grade: '신화', minSize: 75.0, maxSize: 180.0, basePrice: 7500000, color: '#3b0764' },
+    { name: '세계수의 심해 가디언', grade: '신화', minSize: 90.0, maxSize: 220.0, basePrice: 10000000, color: '#1e1b4b' },
+
+    // --- 태초 어류 (Primordial) - 11단계 이상 등장 ---
+    { name: '코스믹 벨루가', grade: '태초', minSize: 400.0, maxSize: 800.0, basePrice: 50000000, color: '#06b6d4' },
+    { name: '초신성 아귀', grade: '태초', minSize: 500.0, maxSize: 1000.0, basePrice: 120000000, color: '#f59e0b' },
+    { name: '뫼비우스 회전 가오리', grade: '태초', minSize: 700.0, maxSize: 1500.0, basePrice: 300000000, color: '#8b5cf6' },
+    { name: '원시의 삼엽충', grade: '태초', minSize: 1000.0, maxSize: 2000.0, basePrice: 800000000, color: '#10b981' },
+    { name: '싱귤래리티 문어', grade: '태초', minSize: 1100.0, maxSize: 2200.0, basePrice: 1500000000, color: '#ef4444' },
+    { name: '황금빛 우주 붕어', grade: '태초', minSize: 1200.0, maxSize: 2500.0, basePrice: 2500000000, color: '#eab308' },
+    { name: '타임리프 틸라피아', grade: '태초', minSize: 1400.0, maxSize: 2800.0, basePrice: 4000000000, color: '#3b82f6' },
+    { name: '차원 균열의 주인 오메가', grade: '태초', minSize: 1500.0, maxSize: 3000.0, basePrice: 8000000000, color: '#dc2626' }
 ];
 
 const MYTHICAL_BEASTS = [
     { name: '등용문 잉어', color: '#eab308', bgGradient: 'linear-gradient(135deg, #fefce8, #fef9c3)', desc: '거센 황하의 용문을 거슬러 오르면 용으로 변한다는 전설의 큰 잉어입니다.', ability: '✨ 보유 효과: 물고기를 판매할 때 등용문 잉어의 가호로 가격이 2배로 증가합니다!' },
     { name: '곤(鯤)', color: '#0284c7', bgGradient: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)', desc: '북쪽 바다에 사는 수천 리 크기의 거대한 물고기입니다.', ability: '✨ 보유 효과: 물고기를 잡을 때 0.1% 확률로 거대한 새 "붕"으로 변신하며, 특수 등급(100만 원)으로 판매할 수 있습니다.' },
     { name: '인면어', color: '#be185d', bgGradient: 'linear-gradient(135deg, #fdf2f8, #fce7f3)', desc: '사람의 얼굴을 닮은 기괴한 물고기로, 야담 등에서 재앙을 예고하는 수중 생물입니다.', ability: '😈 특수 능력: 다른 플레이어에게 저주를 보내 10번의 낚시 동안 50% 확률로 쓰레기를 낚게 만듭니다.' },
-    { name: '마카라', color: '#059669', bgGradient: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', desc: '코끼리나 악어의 머리에 물고기의 몸통과 꼬리를 지닌 신화 속 신성한 수수(水獸)입니다.', ability: '🌊 고유 영물 능력 (포식): 보관고에 있는 물고기를 삼켜 신화급 획득 확률을 높습니다. (일반 +0.01%, 희귀 +0.02%, 영웅 +0.05%, 전설 +0.1% / 신화 획득 시 초기화)' },
+    { name: '마카라', color: '#059669', bgGradient: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', desc: '코끼리나 악어의 머리에 물고기의 몸통과 꼬리를 지닌 신화 속 신성한 수수(水獸)입니다.', ability: '🌊 고유 영물 능력 (포식): 보관고에 있는 물고기를 삼켜 신화 및 태초(11단계 이상) 획득 확률을 높입니다.' },
     { name: '마츠야', color: '#d97706', bgGradient: 'linear-gradient(135deg, #fffbeb, #fef3c7)', desc: '인류를 대홍수로부터 구하기 위해 최고신이 변신한 황금빛 뿔이 달린 거대한 물고기입니다.', ability: '🛡️ 고유 영물 (구원의 자비): 인면어의 저주나 시레인 크로인의 약탈 공격으로부터 자동으로 보호막을 쳐서 모든 피해를 완벽히 차단합니다!' },
     { name: '다곤', color: '#78716c', bgGradient: 'linear-gradient(135deg, #fafaf9, #f5f5f4)', desc: '상반신은 인간, 하반신은 물고기 모양을 한 고대 블레셋인들의 풍요와 농경의 신입니다.', ability: '🤝 고유 영물 (풍요와 거래/상호 계약): 두 플레이어가 서로를 다곤 파트너로 상호 지목하여 연결되면, 어느 한쪽이 낚시할 때 물고기가 서로에게 실시간 복사됩니다!' },
     { name: '바하무트', color: '#b45309', bgGradient: 'linear-gradient(135deg, #fff7ed, #ffedd5)', desc: '전 세계의 무게를 떠받치고 있다고 전해지는, 끝을 알 수 없을 정도로 거대한 물고기입니다.', ability: '🌍 고유 영물 (대지의 지탱): 낚시 비용이 완전히 0원이 되며, 낚시터를 켜두는 동안 30초마다 자동으로 대어를 낚아 올립니다!' },
-    { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
+    { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 마법 나침반의 가속을 받아 빠르게 대어를 잡아옵니다!' },
     { name: '익티오켄타우로스', color: '#7c3aed', bgGradient: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', desc: '상반신은 인간, 앞다리는 말, 뒷몸은 물고기 꼬리를 가진 신비로운 바다의 신들입니다.', ability: '👁️ 고유 영물 (심해의 지혜): 물고기 크기 10% 증가 보정과 함께, 미해금 영물들의 이름과 능력을 도감에서 미리 탐색하여 볼 수 있습니다!' },
     { name: '시레인 크로인', color: '#dc2626', bgGradient: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: '평소에는 은빛의 작은 물고기 형태를 하다가, 어부들을 유혹한 뒤 순식간에 고래마저 삼키는 영물입니다.', ability: '🔥 고유 영물 (심해의 약탈): 물고기를 잡을 때 일정 확률로 남의 최고 등급 물고기마저 훔쳐 오며, 성공할 때마다 약탈 확률이 0.5%씩 영구 누적됩니다!' }
 ];
 
-const GRADE_PRIORITY = { '특수': 7, '영물': 6, '신화': 5, '전설': 4, '영웅': 3, '희귀': 2, '일반': 1 };
+const GRADE_PRIORITY = { '태초': 8, '특수': 7, '영물': 6, '신화': 5, '전설': 4, '영웅': 3, '희귀': 2, '일반': 1 };
+
+function getFishBasePrice(fishName, size) {
+    if (fishName === '붕') return 1000000;
+    if (fishName === '길냥이의 물고기') return size;
+    
+    let baseFish = FISH_DATABASE.find(f => f.name === fishName);
+    let baseUnit = baseFish ? baseFish.basePrice : 20;
+    let grade = baseFish ? baseFish.grade : '일반';
+    
+    let multiplier = 10; 
+    if (grade === '영웅') {
+        multiplier = 5;  
+    } else if (grade === '전설' || grade === '신화' || grade === '태초') {
+        multiplier = 3;  
+    }
+    
+    let rawPrice = Math.floor(baseUnit * size * multiplier);
+    let coinBonusMultiplier = 1 + ((fishingData.silver_coin_level || 0) * 0.03);
+    return Math.floor(rawPrice * coinBonusMultiplier);
+}
 
 function getObfuscatedName(name) {
     const pool = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789가나다라마바사아자차카타파하!@#$%^&*()_+~ㅇㄴfdDㅇ#';
@@ -273,7 +312,7 @@ async function initFishing() {
     if (data) {
         let savedMoney = (data.money !== undefined && data.money >= 0) ? data.money : 1000;
         let savedRod = (data.rod_level !== undefined && data.rod_level >= 1) ? data.rod_level : 1;
-        if (savedRod > 10) savedRod = 10;
+        if (savedRod > 12) savedRod = 12;
 
         fishingData = {
             money: savedMoney,
@@ -284,10 +323,15 @@ async function initFishing() {
             cursed_target: data.cursed_target !== undefined ? data.cursed_target : currentUser,
             curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
             makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
+            makara_primordial_bonus: data.makara_primordial_bonus !== undefined ? data.makara_primordial_bonus : 0,
             siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
             dagon_partner: data.dagon_partner || null,
             is_dagon_mutual: false,
-            trade_request: data.trade_request || null
+            trade_request: data.trade_request || null,
+            silver_coins: data.silver_coins !== undefined ? data.silver_coins : 0,
+            silver_coin_level: data.silver_coin_level !== undefined ? data.silver_coin_level : 0,
+            compass_fragments: data.compass_fragments !== undefined ? data.compass_fragments : 0,
+            compass_level: data.compass_level !== undefined ? data.compass_level : 0
         };
     } else {
         await supabaseClient.from('user_fishing_data').insert([{
@@ -300,11 +344,16 @@ async function initFishing() {
             cursed_target: currentUser,
             curse_remaining_count: 0,
             makara_bonus_chance: 0,
+            makara_primordial_bonus: 0,
             siren_streak: 0,
             dagon_partner: null,
-            trade_request: null
+            trade_request: null,
+            silver_coins: 0,
+            silver_coin_level: 0,
+            compass_fragments: 0,
+            compass_level: 0
         }]);
-        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null };
+        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, makara_primordial_bonus: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null, silver_coins: 0, silver_coin_level: 0, compass_fragments: 0, compass_level: 0 };
     }
 
     await checkDagonMutualStatus();
@@ -335,9 +384,14 @@ async function saveFishingData() {
         cursed_target: fishingData.cursed_target,
         curse_remaining_count: fishingData.curse_remaining_count,
         makara_bonus_chance: fishingData.makara_bonus_chance,
+        makara_primordial_bonus: fishingData.makara_primordial_bonus,
         siren_streak: fishingData.siren_streak,
         dagon_partner: fishingData.dagon_partner,
         trade_request: fishingData.trade_request,
+        silver_coins: fishingData.silver_coins,
+        silver_coin_level: fishingData.silver_coin_level,
+        compass_fragments: fishingData.compass_fragments,
+        compass_level: fishingData.compass_level,
         updated_at: new Date()
     }], { onConflict: 'nickname' });
 
@@ -505,7 +559,7 @@ async function toggleBahamutAuto() {
 }
 
 function closeAllModals() {
-    let modals = document.querySelectorAll('#beastModal, #dmTradeModal, #inboxModal, #tradeRoomModal, #dagonContractModal, #curseModal, #sirenChoiceModal, #tradeResultModal');
+    let modals = document.querySelectorAll('#beastModal, #dmTradeModal, #inboxModal, #tradeRoomModal, #dagonContractModal, #curseModal, #sirenChoiceModal, #tradeResultModal, #pirateUpgradeModal');
     modals.forEach(m => m.remove());
 }
 
@@ -539,10 +593,13 @@ function showBeastDetail(beastName) {
             `;
         } else if (beastName === '마카라') {
             let currentBonusStr = (fishingData.makara_bonus_chance || 0).toFixed(2);
+            let currentPrimordialStr = (fishingData.makara_primordial_bonus || 0).toFixed(2);
+            let primordialInfo = fishingData.rod_level >= 11 ? `<div style="font-size: 0.85rem; color: #047857; font-weight: 700; margin-top: 6px;">🌌 태초 확률 부스터: +${currentPrimordialStr}% 가산 중</div>` : `<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">🔒 태초 확률 누적 (11단계 낚싯대 해금 후 활성)</div>`;
             extraAction = `
                 <div style="margin-top: 12px; background: #ecfdf5; border: 1px solid #10b981; padding: 10px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 0.85rem; color: #047857; font-weight: 700;">🌊 현재 마카라 포식 부스터 누적치</div>
-                    <div style="font-size: 1.1rem; color: #065f46; font-weight: 900; margin-top: 2px;">+${currentBonusStr}% (신화 획득 확률 가산 중)</div>
+                    <div style="font-size: 0.85rem; color: #047857; font-weight: 700;">🌊 마카라 포식 부스터 누적치</div>
+                    <div style="font-size: 1.05rem; color: #065f46; font-weight: 900; margin-top: 2px;">신화 확률: +${currentBonusStr}%</div>
+                    ${primordialInfo}
                 </div>
             `;
         } else if (beastName === '다곤') {
@@ -589,6 +646,94 @@ function showBeastDetail(beastName) {
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function openPirateUpgradeModal() {
+    closeAllModals();
+    let coinLv = fishingData.silver_coin_level || 0;
+    let coinCost = (coinLv + 1) * 10;
+    let coinBonusPct = coinLv * 3;
+
+    let compLv = fishingData.compass_level || 0;
+    let compCost = (compLv + 1) * 10;
+    let compSec = (compLv * 0.15).toFixed(2);
+    let isCompMax = compLv >= MAX_COMPASS_LEVEL;
+
+    let coinButtonHtml = `<button onclick="upgradeSilverCoinSafe()" style="background: #d97706; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer;">강화하기</button>`;
+
+    let compButtonHtml = isCompMax 
+        ? `<button disabled style="background: #94a3b8; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: not-allowed;">MAX 레벨</button>`
+        : `<button onclick="upgradeCompass()" style="background: #16a34a; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer;">강화하기</button>`;
+
+    let modalHtml = `
+        <div id="pirateUpgradeModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
+            <div style="background: white; width: 95%; max-width: 420px; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; border-top: 6px solid #d97706;">
+                <h3 style="margin-top: 0; color: #b45309; font-size: 1.15rem; font-weight: 900; display: flex; justify-content: space-between; align-items: center;">
+                    <span>🏴‍☠️ 해적의 보물 창고 (장비 강화)</span>
+                    <button onclick="document.getElementById('pirateUpgradeModal').remove();" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b;">✕</button>
+                </h3>
+                
+                <!-- 은화 금고 강화 (무한 상승) -->
+                <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-weight: 900; color: #92400e; font-size: 0.95rem; margin-bottom: 2px;">🪙 여덟 조각의 은화 금고 (무한 상승)</div>
+                    <div style="font-size: 0.8rem; color: #78350f; margin-bottom: 6px;">효과: 물고기 판매 골드 <b>+${coinBonusPct}% 증폭</b> (현재 Lv.${coinLv})</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                        <span style="color: #b45309; font-weight: 700;">보유 은화: ${fishingData.silver_coins || 0}개 (필요: ${coinCost}개)</span>
+                        ${coinButtonHtml}
+                    </div>
+                </div>
+
+                <!-- 나침반 강화 (최대 Lv.24) -->
+                <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; padding: 12px; margin-bottom: 16px;">
+                    <div style="font-weight: 900; color: #166534; font-size: 0.95rem; margin-bottom: 2px;">🧭 잭의 마법 나침반</div>
+                    <div style="font-size: 0.8rem; color: #14532d; margin-bottom: 6px;">효과: 낚시 대기 시간 <b>-${compSec}초 단축</b> (현재 Lv.${compLv}/${MAX_COMPASS_LEVEL})</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                        <span style="color: #15803d; font-weight: 700;">보유 나침반: ${fishingData.compass_fragments || 0}개 ${isCompMax ? '(MAX)' : `(필요: ${compCost}개)`}</span>
+                        ${compButtonHtml}
+                    </div>
+                </div>
+
+                <button onclick="document.getElementById('pirateUpgradeModal').remove();" style="width: 100%; background: #64748b; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">닫기</button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function upgradeSilverCoinSafe() {
+    let coinLv = fishingData.silver_coin_level || 0;
+    let cost = (coinLv + 1) * 10;
+    if ((fishingData.silver_coins || 0) < cost) {
+        alert("여덟 조각의 은화가 부족합니다! 낚시를 통해 더 획득하세요.");
+        return;
+    }
+    fishingData.silver_coins -= cost;
+    fishingData.silver_coin_level += 1;
+    await saveFishingData();
+    showFloatingAlert(`🪙 은화 금고 강화 완료! (현재 Lv.${fishingData.silver_coin_level})`);
+    openPirateUpgradeModal();
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+}
+
+async function upgradeCompass() {
+    let compLv = fishingData.compass_level || 0;
+    if (compLv >= MAX_COMPASS_LEVEL) {
+        alert("마법 나침반이 이미 최고 레벨(MAX)에 도달했습니다!");
+        return;
+    }
+    let cost = (compLv + 1) * 10;
+    if ((fishingData.compass_fragments || 0) < cost) {
+        alert("마법 나침반 파편이 부족합니다! 낚시를 통해 더 획득하세요.");
+        return;
+    }
+    fishingData.compass_fragments -= cost;
+    fishingData.compass_level += 1;
+    await saveFishingData();
+    showFloatingAlert(`🧭 마법 나침반 강화 완료! (현재 Lv.${fishingData.compass_level})`);
+    openPirateUpgradeModal();
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
 }
 
 function openDagonContractModal() {
@@ -1082,7 +1227,7 @@ async function renderFishingView(contentArea) {
             }
         } else if (fishingStep === 'waiting') {
             let hasHippocampus = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('히포캠포스');
-            statusText = hasHippocampus ? '⚡ [히포캠포스] 파도를 가르며 대어를 낚아채는 중...' : '물고기가 미끼 주변을 서성이는 중...';
+            statusText = hasHippocampus ? '⚡ [히포캠포스] 나침반의 가속을 받아 대어를 낚아채는 중...' : '물고기가 미끼 주변을 서성이는 중...';
             actionBtnHtml = `<button onclick="earlyClickAlert()" style="width: 100%; padding: 16px; background: #64748b; border: none; border-radius: 12px; color: white; font-size: 1.1rem; font-weight: 700; cursor: pointer;">대어 기다리는 중... (누르면 취소)</button>`;
         } else if (fishingStep === 'bite') {
             statusText = '지금이다! 0.75초 안에 잡으세요!!';
@@ -1110,16 +1255,7 @@ async function renderFishingView(contentArea) {
                 let size = parsed.size;
                 let isDagonItem = parsed.dagon;
 
-                let calculatedPrice = 0;
-                if (fishName === '붕') {
-                    calculatedPrice = 1000000;
-                } else if (fishName === '길냥이의 물고기') {
-                    calculatedPrice = size;
-                } else {
-                    let baseUnit = baseFish ? baseFish.basePrice : 20;
-                    calculatedPrice = Math.floor(baseUnit * size * 10);
-                }
-                
+                let calculatedPrice = getFishBasePrice(fishName, size);
                 let finalPrice = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? calculatedPrice * 2 : calculatedPrice; 
                 let carpBadge = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? `<span style="color: #d97706; font-size: 0.7rem; font-weight: 800; background: #fef3c7; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">✨등용문 2배</span>` : ``;
                 let dagonBadge = isDagonItem ? `<span style="color: #78716c; font-size: 0.7rem; font-weight: 800; background: #f5f5f4; border: 1px solid #d6d3d1; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">[다곤]</span>` : ``;
@@ -1210,10 +1346,14 @@ async function renderFishingView(contentArea) {
     let makaraBoosterHtml = "";
     if (hasMakara) {
         let makaraCurrentBonus = (fishingData.makara_bonus_chance || 0).toFixed(2);
+        let primordialBoosterStr = fishingData.rod_level >= 11 ? `<div style="color: #065f46; font-weight: 900; font-size: 0.95rem; margin-top: 4px;">태초 확률 부스터: +${(fishingData.makara_primordial_bonus || 0).toFixed(2)}% 가산 중</div>` : ``;
         makaraBoosterHtml = `
-            <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
-                <span style="color: #047857; font-weight: 700;">🌊 마카라 신화 확률 부스터:</span>
-                <span style="color: #065f46; font-weight: 900; font-size: 1rem;">+${makaraCurrentBonus}% 가산 중</span>
+            <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #047857; font-weight: 700;">🌊 마카라 신화 확률 부스터:</span>
+                    <span style="color: #065f46; font-weight: 900; font-size: 1rem;">+${makaraCurrentBonus}% 가산 중</span>
+                </div>
+                ${primordialBoosterStr}
             </div>
         `;
     }
@@ -1226,7 +1366,10 @@ async function renderFishingView(contentArea) {
         <div class="card">
             <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <span>🎣 인생 역전 심해 낚시터</span>
-                <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn-back" onclick="openPirateUpgradeModal()" style="background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; font-weight: 800;">🏴‍☠️ 해적 창고</button>
+                    <button class="btn-back" onclick="navigateTo('home')">메인으로</button>
+                </div>
             </div>
 
             ${tradeStatusBanner}
@@ -1239,8 +1382,18 @@ async function renderFishingView(contentArea) {
                     <div style="font-size: 1.2rem; font-weight: 800; color: #16a34a;">${fishingData.money.toLocaleString()}원</div>
                 </div>
                 <div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">현재 낚시대 (${fishingData.rod_level}/10단계)</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">현재 낚시대 (${fishingData.rod_level}/12단계)</div>
                     <div style="font-size: 1rem; font-weight: 700; color: var(--text-main);">${currentRod.name}</div>
+                </div>
+            </div>
+
+            <!-- 해적 재화 요약 바 -->
+            <div style="display: flex; justify-content: space-around; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 10px; margin-bottom: 16px; font-size: 0.85rem; text-align: center;">
+                <div>
+                    <span style="color: #92400e; font-weight: 700;">🪙 은화 금고 (Lv.${fishingData.silver_coin_level || 0}):</span> <b style="color: #b45309;">${fishingData.silver_coins || 0}개</b>
+                </div>
+                <div>
+                    <span style="color: #166534; font-weight: 700;">🧭 나침반 (Lv.${fishingData.compass_level || 0}/${MAX_COMPASS_LEVEL}):</span> <b style="color: #15803d;">${fishingData.compass_fragments || 0}개</b>
                 </div>
             </div>
 
@@ -1256,7 +1409,7 @@ async function renderFishingView(contentArea) {
             <div style="margin-bottom: 20px;">
                 ${nextRod ? `
                 <button class="btn-primary" onclick="upgradeRod()" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 12px;">⬆️ 낚시대 업그레이드 (${nextRod.name} - ${nextRod.price.toLocaleString()}원)</button>
-                ` : `<div style="text-align: center; font-size: 0.85rem; font-weight: 700; color: #7c3aed;">👑 만렙 궁극의 낚시대를 보유하고 있습니다!</div>`}
+                ` : `<div style="text-align: center; font-size: 0.85rem; font-weight: 700; color: #7c3aed;">👑 태초의 창조주 만렙 궁극의 낚시대를 보유하고 있습니다!</div>`}
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
@@ -1267,7 +1420,7 @@ async function renderFishingView(contentArea) {
                 ${inventoryHtml}
             </div>
 
-            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">📖 일반 어류 도감</h3>
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">📖 어류 도감</h3>
             <div style="display: flex; flex-direction: column; max-height: 180px; overflow-y: auto; margin-bottom: 16px;">
                 ${recordsHtml}
             </div>
@@ -1298,10 +1451,13 @@ async function startCast() {
 
     if (hasHippocampus) {
         fishingStep = 'waiting';
-        statusText = "⚡ [히포캠포스] 파도를 가르며 대어를 낚아채는 중...";
+        statusText = "⚡ [히포캠포스] 나침반의 가속을 받아 대어를 낚아채는 중...";
         let contentArea = document.getElementById("contentArea");
         if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
+
+        let reduction = (fishingData.compass_level || 0) * 150;
+        let hipWait = Math.max(500, 5000 - reduction);
 
         setTimeout(() => {
             if (fishingStep === 'waiting') {
@@ -1312,14 +1468,17 @@ async function startCast() {
                 if (contentArea) renderFishingView(contentArea);
                 window.scrollTo(0, currentScroll);
             }
-        }, 5000);
+        }, hipWait);
     } else {
         fishingStep = 'waiting';
         let contentArea = document.getElementById("contentArea");
         if (contentArea) renderFishingView(contentArea);
         window.scrollTo(0, currentScroll);
 
-        let waitTime = Math.random() * 2500 + 1500;
+        let reduction = (fishingData.compass_level || 0) * 150;
+        let baseWait = Math.random() * 2500 + 1500;
+        let waitTime = Math.max(500, baseWait - reduction);
+
         biteTimeout = setTimeout(() => {
             if (fishingStep !== 'waiting') return;
             fishingStep = 'bite';
@@ -1421,30 +1580,43 @@ function executeCatchLogic() {
         }
     }
 
+    let coinDropCount = Math.random() < 0.35 ? (Math.floor(Math.random() * 2) + 1) : 0;
+    let compassDropCount = Math.random() < 0.35 ? (Math.floor(Math.random() * 2) + 1) : 0;
+    if (coinDropCount > 0) fishingData.silver_coins = (fishingData.silver_coins || 0) + coinDropCount;
+    if (compassDropCount > 0) fishingData.compass_fragments = (fishingData.compass_fragments || 0) + compassDropCount;
+
     let rand = Math.random() * 100;
     let rodLevel = fishingData.rod_level;
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
-    let baseMythicChance = (rodLevel >= 6) ? 0.01 * Math.pow(5, rodLevel - 6) : 0; 
     
+    let baseMythicChance = (rodLevel >= 10) ? (0.01 * Math.pow(5, Math.min(rodLevel, 12) - 6)) : 0; 
     let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
-    let makaraBonus = hasMakara ? (fishingData.makara_bonus_chance || 0) : 0;
+    let makaraBonus = (hasMakara && rodLevel >= 10) ? (fishingData.makara_bonus_chance || 0) : 0;
     let mythicChance = baseMythicChance + makaraBonus;
+
+    let basePrimordialChance = (rodLevel >= 11) ? 0.1 : 0;
+    let makaraPrimordialBonus = (hasMakara && rodLevel >= 11) ? (fishingData.makara_primordial_bonus || 0) : 0;
+    let primordialChance = basePrimordialChance + makaraPrimordialBonus;
 
     let heroChance = 3 + (rodLevel * 1.8); 
     let rareChance = 25 + (rodLevel * 0.5); 
 
     let selectedFish;
-    if (rand < mythicChance) {
+    if (rodLevel >= 11 && rand < primordialChance) {
+        let pool = FISH_DATABASE.filter(f => f.grade === '태초');
+        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        if (hasMakara) fishingData.makara_primordial_bonus = 0;
+    } else if (rodLevel >= 10 && rand < primordialChance + mythicChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '신화');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
-        if (hasMakara) fishingData.makara_bonus_chance = 0; 
-    } else if (rand < mythicChance + legendaryChance) {
+        if (hasMakara) fishingData.makara_bonus_chance = 0;
+    } else if (rand < primordialChance + mythicChance + legendaryChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '전설');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
-    } else if (rand < mythicChance + legendaryChance + heroChance) {
+    } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '영웅');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
-    } else if (rand < mythicChance + legendaryChance + heroChance + rareChance) {
+    } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance + rareChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '희귀');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
     } else {
@@ -1510,13 +1682,19 @@ async function feedMakara(fishName, index) {
 
     let baseFish = FISH_DATABASE.find(f => f.name === fishName);
     let grade = baseFish ? baseFish.grade : '일반';
-    let bonusAdd = grade === '일반' ? 0.01 : (grade === '희귀' ? 0.02 : (grade === '영웅' ? 0.05 : 0.1));
+    
+    let mythicBonusAdd = grade === '일반' ? 0.01 : (grade === '희귀' ? 0.02 : (grade === '영웅' ? 0.05 : (grade === '전설' ? 0.1 : 0.2)));
+    if (!fishingData.makara_bonus_chance) fishingData.makara_bonus_chance = 0;
+    fishingData.makara_bonus_chance += mythicBonusAdd;
+
+    if (fishingData.rod_level >= 11) {
+        let primordialBonusAdd = mythicBonusAdd * 0.1;
+        if (!fishingData.makara_primordial_bonus) fishingData.makara_primordial_bonus = 0;
+        fishingData.makara_primordial_bonus += primordialBonusAdd;
+    }
 
     sizesArr.splice(index, 1);
     if (sizesArr.length === 0) delete fishingData.fish_inventory[fishName];
-
-    if (!fishingData.makara_bonus_chance) fishingData.makara_bonus_chance = 0;
-    fishingData.makara_bonus_chance += bonusAdd;
 
     await saveFishingData();
     let contentArea = document.getElementById("contentArea");
@@ -1539,9 +1717,7 @@ async function sellFish(fishName, index) {
     } else if (fishName === '길냥이의 물고기') {
         sellPrice = targetSize;
     } else {
-        let baseFish = FISH_DATABASE.find(f => f.name === fishName);
-        let baseUnit = baseFish ? baseFish.basePrice : 20;
-        let calculatedBase = Math.floor(baseUnit * targetSize * 10);
+        let calculatedBase = getFishBasePrice(fishName, targetSize);
         sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase;
     }
 
@@ -1563,8 +1739,6 @@ async function sellAllFish() {
 
     for (let [fishName, sizesArr] of Object.entries(fishingData.fish_inventory)) {
         if (!sizesArr) continue;
-        let baseFish = FISH_DATABASE.find(f => f.name === fishName);
-        let baseUnit = baseFish ? baseFish.basePrice : 20;
 
         sizesArr.forEach(item => {
             let parsed = parseFishItem(item);
@@ -1573,7 +1747,7 @@ async function sellAllFish() {
             } else if (fishName === '길냥이의 물고기') {
                 totalSell += parsed.size;
             } else {
-                let calculatedBase = Math.floor(baseUnit * parsed.size * 10);
+                let calculatedBase = getFishBasePrice(fishName, parsed.size);
                 totalSell += hasCarp ? calculatedBase * 2 : calculatedBase;
             }
         });
@@ -1627,7 +1801,7 @@ async function claimChance() {
     window.scrollTo(0, currentScroll);
 }
 
-// 🟢 HTML 인라인 이벤트 및 외부 참조가 가능하도록 전역 window 객체에 함수 바인딩
+// 🟢 전역 window 객체에 함수 바인딩
 window.initFishing = initFishing;
 window.renderFishingView = renderFishingView;
 window.startCast = startCast;
@@ -1639,6 +1813,9 @@ window.feedMakara = feedMakara;
 window.upgradeRod = upgradeRod;
 window.claimChance = claimChance;
 window.showBeastDetail = showBeastDetail;
+window.openPirateUpgradeModal = openPirateUpgradeModal;
+window.upgradeSilverCoinSafe = upgradeSilverCoinSafe;
+window.upgradeCompass = upgradeCompass;
 window.openDagonContractModal = openDagonContractModal;
 window.submitDagonContract = submitDagonContract;
 window.cancelDagonContract = cancelDagonContract;
