@@ -78,10 +78,8 @@ function renderSidebarMenu() {
 }
 
 function setupRealtimeSubscriptions() {
-    // 🟢 채널 이름을 고유하게 만들어 기존 구독과의 충돌 방지
     const channelName = 'public-db-changes-' + (currentUser || 'guest');
     
-    // 혹시 기존에 남아있는 같은 이름의 채널이 있다면 제거
     supabaseClient.removeAllChannels();
 
     supabaseClient
@@ -200,8 +198,8 @@ function navigateTo(view) {
         isCreatingTravelRoom = false;
         fetchTravelRooms();
     } else if (view === 'fishing') {
-    initFishing().then(() => renderFishingView(document.getElementById("contentArea")));
-    return;
+        initFishing().then(() => renderFishingView(document.getElementById("contentArea")));
+        return;
     }
     renderMainContent();
 }
@@ -430,6 +428,18 @@ async function handleAuth() {
         let cleanN = cleanName(nickname);
         if (!cleanN) { alert("올바른 이름을 입력해주세요!"); return; }
         if (code !== INVITE_CODE) { alert("초대 코드가 올바르지 않습니다!"); return; }
+
+        // 🟢 [보완] 회원가입 전 닉네임 중복 여부 확인
+        const { data: existingUser, error: checkError } = await supabaseClient
+            .from('users')
+            .select('nickname')
+            .eq('nickname', cleanN)
+            .maybeSingle();
+
+        if (existingUser) {
+            alert("이미 존재하는 이름(닉네임)입니다. 다른 닉네임을 사용해주세요.");
+            return;
+        }
 
         const { data, error } = await supabaseClient.auth.signUp({
             email: email, password: password, options: { data: { nickname: cleanN } }

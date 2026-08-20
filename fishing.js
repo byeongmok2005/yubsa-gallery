@@ -1412,11 +1412,11 @@ async function hookFish() {
 function executeCatchLogic() {
     let unobtainedBeasts = MYTHICAL_BEASTS.filter(b => !fishingData.unlocked_beasts.includes(b.name));
     for (let beast of unobtainedBeasts) {
-        if (Math.random() * 100 < 0.01) {
+        if (Math.random() * 100 < 0.05) {
             if (!fishingData.unlocked_beasts) fishingData.unlocked_beasts = [];
             fishingData.unlocked_beasts.push(beast.name);
             saveFishingData();
-            showFloatingAlert(`✨🏛️ [전설의 영물 발견!] 신비로운 수호신 "${beast.name}"을(를) 낚아 올렸습니다!`);
+            showFloatingAlert(`✨🏛️ [전설의 영물 발견!] "${beast.name}"을(를) 낚아 올렸습니다!`);
             break; 
         }
     }
