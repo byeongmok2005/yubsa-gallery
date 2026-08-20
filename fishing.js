@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (다곤 상호 양방향 계약 및 실시간 공유 최종 완성본)
+// fishing.js - 심해 낚시터 (익티오 미보유 시 암호화 이름 표시 및 상호 다곤 계약 완성본)
 
 let fishingData = { 
     money: 1000, 
@@ -95,6 +95,26 @@ const MYTHICAL_BEASTS = [
 
 const GRADE_PRIORITY = { '특수': 7, '영물': 6, '신화': 5, '전설': 4, '영웅': 3, '희귀': 2, '일반': 1 };
 
+// 🟢 영물 이름 크기와 길이에 맞춰 한글, 영어, 기호가 섞인 암호화 텍스트 생성 함수 (고정 해시 기반)
+function getObfuscatedName(name) {
+    const pool = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789가나다라마바사아자차카타파하!@#$%^&*()_+~ㅇㄴfdDㅇ#';
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = (hash << 5) - hash + name.charCodeAt(i);
+        hash |= 0;
+    }
+    let result = '';
+    for (let i = 0; i < name.length; i++) {
+        if (name[i] === ' ' || name[i] === '(' || name[i] === ')') {
+            result += name[i];
+            continue;
+        }
+        let charCodeIndex = Math.abs(hash + i * 37) % pool.length;
+        result += pool[charCodeIndex];
+    }
+    return result;
+}
+
 function parseFishItem(item) {
     if (typeof item === 'object' && item !== null) {
         return { size: Number(item.size), dagon: !!item.dagon };
@@ -112,7 +132,6 @@ function hasInventoryFish() {
     return false;
 }
 
-// 상호 다곤 계약 상태 확인 함수
 async function checkDagonMutualStatus() {
     if (!currentUser || !fishingData.dagon_partner) {
         fishingData.is_dagon_mutual = false;
@@ -139,15 +158,6 @@ async function checkDagonMutualStatus() {
 async function initFishing() {
     if (!currentUser) return;
 
-    const allowedTesters = ['박병목', '실험체'];
-    if (!allowedTesters.includes(currentUser)) {
-        alert("⚠️ 현재 낚시 시스템은 시험 운영 중입니다. 허용된 계정만 접근할 수 있습니다!");
-        if (typeof navigateTo === 'function') {
-            navigateTo('home');
-        }
-        return;
-    }
-
     let fetchedPlayers = new Set(playerList);
 
     try {
@@ -165,48 +175,39 @@ async function initFishing() {
     let savedBahamut = localStorage.getItem(`bahamut_auto_${currentUser}`);
     bahamutAutoActive = savedBahamut !== null ? JSON.parse(savedBahamut) : true;
 
-    const { data } = await supabaseClient
-        .from('user_fishing_data')
-        .select('*')
-        .eq('nickname', currentUser)
-        .maybeSingle();
+    let freshData = {
+        nickname: currentUser,
+        money: 1000,
+        rod_level: 1,
+        fish_records: {},
+        fish_inventory: {},
+        unlocked_beasts: [],
+        cursed_target: currentUser,
+        curse_remaining_count: 0,
+        makara_bonus_chance: 0,
+        siren_streak: 0,
+        dagon_partner: null,
+        trade_request: null,
+        updated_at: new Date()
+    };
 
-    if (data) {
-        let savedMoney = (data.money !== undefined && data.money >= 0) ? data.money : 1000;
-        let savedRod = (data.rod_level !== undefined && data.rod_level >= 1) ? data.rod_level : 1;
-        if (savedRod > 10) savedRod = 10;
+    await supabaseClient.from('user_fishing_data').upsert([freshData], { onConflict: 'nickname' });
 
-        fishingData = {
-            money: savedMoney,
-            rod_level: savedRod,
-            fish_records: data.fish_records || {},
-            fish_inventory: data.fish_inventory || {},
-            unlocked_beasts: data.unlocked_beasts || [],
-            cursed_target: data.cursed_target !== undefined ? data.cursed_target : currentUser,
-            curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
-            makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
-            siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
-            dagon_partner: data.dagon_partner || null,
-            is_dagon_mutual: false,
-            trade_request: data.trade_request || null
-        };
-    } else {
-        await supabaseClient.from('user_fishing_data').insert([{
-            nickname: currentUser,
-            money: 1000,
-            rod_level: 1,
-            fish_records: {},
-            fish_inventory: {},
-            unlocked_beasts: [],
-            cursed_target: currentUser,
-            curse_remaining_count: 0,
-            makara_bonus_chance: 0,
-            siren_streak: 0,
-            dagon_partner: null,
-            trade_request: null
-        }]);
-        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null };
-    }
+    fishingData = {
+        money: 1000,
+        rod_level: 1,
+        fish_records: {},
+        fish_inventory: {},
+        unlocked_beasts: [],
+        cursed_target: currentUser,
+        curse_remaining_count: 0,
+        makara_bonus_chance: 0,
+        siren_streak: 0,
+        dagon_partner: null,
+        is_dagon_mutual: false,
+        trade_request: null
+    };
+
     hasUsedChance = false;
 
     await checkDagonMutualStatus();
@@ -253,7 +254,6 @@ function startTradePolling() {
     tradePollingInterval = setInterval(async () => {
         if (!currentUser) return;
 
-        // 상호 다곤 계약 상태 실시간 확인
         let oldMutual = fishingData.is_dagon_mutual;
         await checkDagonMutualStatus();
         if (oldMutual !== fishingData.is_dagon_mutual) {
@@ -407,12 +407,19 @@ function showBeastDetail(beastName) {
     if (!beast) return;
 
     let isUnlocked = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes(beastName);
+    let hasIchthio = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('익티오켄타우로스');
+
+    if (!isUnlocked && !hasIchthio) {
+        alert("익티오켄타우로스 영물을 해금해야 미해금 영물의 정보를 탐색할 수 있습니다!");
+        return;
+    }
+
     let extraAction = "";
 
     if (!isUnlocked) {
         extraAction = `
             <div style="margin-top: 14px; background: #f1f5f9; padding: 10px; border-radius: 8px; text-align: center; color: #64748b; font-size: 0.85rem; font-weight: 700;">
-                🔒 미해금 영물입니다. 낚시를 통해 해금하세요!
+                👁️ 익티오켄타우로스의 시야로 탐색 중인 미해금 영물입니다.
             </div>
         `;
     } else {
@@ -1039,6 +1046,8 @@ async function renderFishingView(contentArea) {
         });
     }
 
+    let hasIchthio = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('익티오켄타우로스');
+
     let beastsHtml = "";
     MYTHICAL_BEASTS.forEach(beast => {
         let isUnlocked = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes(beast.name);
@@ -1052,7 +1061,7 @@ async function renderFishingView(contentArea) {
                     <div style="font-size: 0.8rem; color: #334155; line-height: 1.4;">${beast.desc}</div>
                 </div>
             `;
-        } else {
+        } else if (hasIchthio) {
             beastsHtml += `
                 <div style="background: #f1f5f9; border: 2px dashed #94a3b8; border-radius: 10px; padding: 12px; margin-bottom: 10px; opacity: 0.85;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
@@ -1060,6 +1069,16 @@ async function renderFishingView(contentArea) {
                         <button onclick="showBeastDetail('${beast.name}')" style="background: #64748b; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">능력 미리보기</button>
                     </div>
                     <div style="font-size: 0.8rem; color: #64748b; line-height: 1.4;">${beast.desc}</div>
+                </div>
+            `;
+        } else {
+            let fakeName = getObfuscatedName(beast.name);
+            beastsHtml += `
+                <div style="background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; margin-bottom: 10px; opacity: 0.7;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-weight: 900; font-size: 1rem; color: #94a3b8; font-family: monospace;">🔒 ${fakeName} (잠김)</span>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #94a3b8; line-height: 1.4;">아직 발견되지 않은 미지의 영물입니다.</div>
                 </div>
             `;
         }
@@ -1302,7 +1321,6 @@ function executeCatchLogic() {
 
     saveFishingData();
 
-    // 🟢 상호 계약이 연결된 파트너에게만 물고기 실시간 복사 (양방향 모두 서로를 지정했을 때만 작동)
     if (fishingData.dagon_partner && fishingData.is_dagon_mutual) {
         let partnerName = fishingData.dagon_partner;
         supabaseClient.from('user_fishing_data').select('*').eq('nickname', partnerName).maybeSingle().then(async ({ data: partnerRow }) => {
