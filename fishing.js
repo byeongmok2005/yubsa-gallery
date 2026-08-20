@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (마카라 보유 검증 완성본)
+// fishing.js - 심해 낚시터 (상단 알림 팝업 고정 버전)
 
 let fishingData = { 
     money: 1000, 
@@ -88,7 +88,7 @@ const MYTHICAL_BEASTS = [
     { name: '마츠야', color: '#d97706', bgGradient: 'linear-gradient(135deg, #fffbeb, #fef3c7)', desc: '인류를 대홍수로부터 구하기 위해 최고신이 변신한 황금빛 뿔이 달린 거대한 물고기입니다.', ability: '🛡️ 고유 영물 (구원의 자비): 인면어의 저주나 시레인 크로인의 약탈 공격으로부터 자동으로 보호막을 쳐서 모든 피해를 완벽히 차단합니다!' },
     { name: '다곤', color: '#78716c', bgGradient: 'linear-gradient(135deg, #fafaf9, #f5f5f4)', desc: '상반신은 인간, 하반신은 물고기 모양을 한 고대 블레셋인들의 풍요와 농경의 신입니다.', ability: '🤝 고유 영물 (풍요와 거래/상호 계약): 두 플레이어가 서로를 다곤 파트너로 상호 지목하여 연결되면, 어느 한쪽이 낚시할 때 물고기가 서로에게 실시간 복사됩니다!' },
     { name: '바하무트', color: '#b45309', bgGradient: 'linear-gradient(135deg, #fff7ed, #ffedd5)', desc: '전 세계의 무게를 떠받치고 있다고 전해지는, 끝을 알 수 없을 정도로 거대한 물고기입니다.', ability: '🌍 고유 영물 (대지의 지탱): 낚시 비용이 완전히 0원이 되며, 낚시터를 켜두는 동안 30초마다 자동으로 대어를 낚아 올립니다!' },
-    { name: '히포캠포с', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
+    { name: '히포캠포스', color: '#0ea5e9', bgGradient: 'linear-gradient(135deg, #f0f9ff, #bae6fd)', desc: '말의 앞몸에 물고기의 꼬리가 달린 바다의 말입니다. 바다의 신의 전차를 끄는 영물입니다.', ability: '⚡ 고유 영물 (질주): 낚싯대를 던지면 기다릴 필요 없는 5초 안에 자동으로 대어를 잡아옵니다!' },
     { name: '익티오켄타우로스', color: '#7c3aed', bgGradient: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', desc: '상반신은 인간, 앞다리는 말, 뒷몸은 물고기 꼬리를 가진 신비로운 바다의 신들입니다.', ability: '👁️ 고유 영물 (심해의 지혜): 물고기 크기 10% 증가 보정과 함께, 미해금 영물들의 이름과 능력을 도감에서 미리 탐색하여 볼 수 있습니다!' },
     { name: '시레인 크로인', color: '#dc2626', bgGradient: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: '평소에는 은빛의 작은 물고기 형태를 하다가, 어부들을 유혹한 뒤 순식간에 고래마저 삼키는 영물입니다.', ability: '🔥 고유 영물 (심해의 약탈): 물고기를 잡을 때 일정 확률로 남의 최고 등급 물고기를 훔쳐 오며, 성공할 때마다 약탈 확률이 0.5%씩 영구 누적됩니다!' }
 ];
@@ -387,14 +387,20 @@ function startBahamutAutoFishing() {
 
 function showFloatingAlert(text) {
     floatingAlertText = text;
-    let contentArea = document.getElementById("contentArea");
-    if (contentArea) renderFishingView(contentArea);
+    let box = document.getElementById('floatingAlertBox');
+    if (box) {
+        box.innerText = text;
+        box.style.display = 'block';
+    } else {
+        let contentArea = document.getElementById("contentArea");
+        if (contentArea) renderFishingView(contentArea);
+    }
 
     setTimeout(() => { 
         if (floatingAlertText === text) {
             floatingAlertText = ""; 
-            let box = document.getElementById('floatingAlertBox');
-            if (box) box.style.display = 'none';
+            let targetBox = document.getElementById('floatingAlertBox');
+            if (targetBox) targetBox.style.display = 'none';
         }
     }, 3500);
 }
@@ -1129,6 +1135,9 @@ async function renderFishingView(contentArea) {
     let alertBoxDisplay = floatingAlertText ? 'block' : 'none';
 
     contentArea.innerHTML = `
+        <!-- 🟢 낚시 방해를 없애기 위해 화면 상단 중앙에 고정되는 알림 팝업 -->
+        <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 12px 24px; border-radius: 12px; font-size: 0.95rem; font-weight: 800; z-index: 9999; border: 2px solid #38bdf8; box-shadow: 0 6px 20px rgba(0,0,0,0.3); text-align: center; pointer-events: none; max-width: 90%;">${floatingAlertText}</div>
+
         <div class="card">
             <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <span>🎣 인생 역전 심해 낚시터</span>
@@ -1153,7 +1162,6 @@ async function renderFishingView(contentArea) {
             ${makaraBoosterHtml}
 
             <div style="position: relative; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 14px 24px; border-radius: 12px; font-size: 1.05rem; font-weight: 800; z-index: 10; border: 2px solid #38bdf8;">${floatingAlertText}</div>
                 <div id="fishingStatusText" style="font-size: 1rem; font-weight: 700; color: ${statusColor}; margin-bottom: 14px; line-height: 1.4;">
                     ${statusText}
                 </div>
@@ -1317,7 +1325,6 @@ async function hookFish() {
 }
 
 function executeCatchLogic() {
-    // 🟢 영물 낚시 체크 (모든 낚싯대 공통, 미해금 영물 각각 0.01% 확률, 중복 등장 없음)
     let unobtainedBeasts = MYTHICAL_BEASTS.filter(b => !fishingData.unlocked_beasts.includes(b.name));
     for (let beast of unobtainedBeasts) {
         if (Math.random() * 100 < 0.01) {
@@ -1334,7 +1341,6 @@ function executeCatchLogic() {
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
     let baseMythicChance = (rodLevel >= 6) ? 0.01 * Math.pow(5, rodLevel - 6) : 0; 
     
-    // 🟢 마카라 영물을 실제로 보유하고 있을 때만 부스터 확률 적용
     let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
     let makaraBonus = hasMakara ? (fishingData.makara_bonus_chance || 0) : 0;
     let mythicChance = baseMythicChance + makaraBonus;
@@ -1346,7 +1352,7 @@ function executeCatchLogic() {
     if (rand < mythicChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '신화');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
-        if (hasMakara) fishingData.makara_bonus_chance = 0; // 마카라 보유 시에만 신화 획득 시 초기화
+        if (hasMakara) fishingData.makara_bonus_chance = 0; 
     } else if (rand < mythicChance + legendaryChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '전설');
         selectedFish = pool[Math.floor(Math.random() * pool.length)];
@@ -1377,7 +1383,6 @@ function executeCatchLogic() {
 
     saveFishingData();
 
-    // 🟢 다곤 보유 여부가 양쪽 다 확실할 때만 실시간 복사 실행
     let hasMyDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
     if (hasMyDagon && fishingData.dagon_partner && fishingData.is_dagon_mutual) {
         let partnerName = fishingData.dagon_partner;
