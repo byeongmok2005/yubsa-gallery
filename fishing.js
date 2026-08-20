@@ -1,4 +1,4 @@
-// fishing.js - 심해 낚시터 (길냥이 물고기 낚싯대 1회 비용 연동 버전)
+// fishing.js - 심해 낚시터 (실제 해양 어류 120여 종 대규모 확장 버전)
 
 let fishingData = { 
     money: 1000, 
@@ -38,6 +38,7 @@ const ROD_TIERS = {
 };
 
 const FISH_DATABASE = [
+    // --- 일반 어류 (Common) ---
     { name: '정어리', grade: '일반', minSize: 10, maxSize: 20, basePrice: 12, color: '#64748b' },
     { name: '고등어', grade: '일반', minSize: 20, maxSize: 40, basePrice: 25, color: '#64748b' },
     { name: '오징어', grade: '일반', minSize: 20, maxSize: 50, basePrice: 35, color: '#64748b' },
@@ -46,7 +47,30 @@ const FISH_DATABASE = [
     { name: '학꽁치', grade: '일반', minSize: 20, maxSize: 35, basePrice: 28, color: '#64748b' },
     { name: '볼락', grade: '일반', minSize: 15, maxSize: 35, basePrice: 30, color: '#64748b' },
     { name: '양미리', grade: '일반', minSize: 10, maxSize: 25, basePrice: 15, color: '#64748b' },
+    { name: '청어', grade: '일반', minSize: 15, maxSize: 32, basePrice: 22, color: '#64748b' },
+    { name: '전어', grade: '일반', minSize: 12, maxSize: 28, basePrice: 18, color: '#64748b' },
+    { name: '삼치', grade: '일반', minSize: 30, maxSize: 70, basePrice: 40, color: '#64748b' },
+    { name: '숭어', grade: '일반', minSize: 25, maxSize: 60, basePrice: 32, color: '#64748b' },
+    { name: '망둥어', grade: '일반', minSize: 10, maxSize: 22, basePrice: 14, color: '#64748b' },
+    { name: '복어', grade: '일반', minSize: 15, maxSize: 30, basePrice: 38, color: '#64748b' },
+    { name: '쏨뱅이', grade: '일반', minSize: 15, maxSize: 35, basePrice: 33, color: '#64748b' },
+    { name: '노래미', grade: '일반', minSize: 20, maxSize: 40, basePrice: 27, color: '#64748b' },
+    { name: '황돔', grade: '일반', minSize: 18, maxSize: 35, basePrice: 36, color: '#64748b' },
+    { name: '자리돔', grade: '일반', minSize: 8, maxSize: 18, basePrice: 16, color: '#64748b' },
+    { name: '벤자리', grade: '일반', minSize: 20, maxSize: 45, basePrice: 39, color: '#64748b' },
+    { name: '독가치', grade: '일반', minSize: 15, maxSize: 30, basePrice: 24, color: '#64748b' },
+    { name: '망상어', grade: '일반', minSize: 12, maxSize: 26, basePrice: 19, color: '#64748b' },
+    { name: '까나리', grade: '일반', minSize: 8, maxSize: 20, basePrice: 11, color: '#64748b' },
+    { name: '꼼치', grade: '일반', minSize: 20, maxSize: 50, basePrice: 29, color: '#64748b' },
+    { name: '도루묵', grade: '일반', minSize: 15, maxSize: 28, basePrice: 21, color: '#64748b' },
+    { name: '양태', grade: '일반', minSize: 25, maxSize: 55, basePrice: 34, color: '#64748b' },
+    { name: '쥐치', grade: '일반', minSize: 15, maxSize: 35, basePrice: 37, color: '#64748b' },
+    { name: '말쥐치', grade: '일반', minSize: 20, maxSize: 42, basePrice: 42, color: '#64748b' },
+    { name: '붕장어(아나고)', grade: '일반', minSize: 30, maxSize: 70, basePrice: 45, color: '#64748b' },
+    { name: '도다리', grade: '일반', minSize: 20, maxSize: 45, basePrice: 38, color: '#64748b' },
+    { name: '성대', grade: '일반', minSize: 18, maxSize: 38, basePrice: 30, color: '#64748b' },
 
+    // --- 희귀 어류 (Rare) ---
     { name: '광어', grade: '희귀', minSize: 40, maxSize: 80, basePrice: 95, color: '#16a34a' },
     { name: '우럭', grade: '희귀', minSize: 30, maxSize: 60, basePrice: 110, color: '#16a34a' },
     { name: '참돔', grade: '희귀', minSize: 45, maxSize: 90, basePrice: 150, color: '#16a34a' },
@@ -56,7 +80,29 @@ const FISH_DATABASE = [
     { name: '갑오징어', grade: '희귀', minSize: 25, maxSize: 55, basePrice: 120, color: '#16a34a' },
     { name: '감성돔', grade: '희귀', minSize: 40, maxSize: 75, basePrice: 175, color: '#16a34a' },
     { name: '능성어', grade: '희귀', minSize: 45, maxSize: 95, basePrice: 220, color: '#16a34a' },
+    { name: '민어', grade: '희귀', minSize: 60, maxSize: 130, basePrice: 280, color: '#16a34a' },
+    { name: '옥돔', grade: '희귀', minSize: 30, maxSize: 55, basePrice: 140, color: '#16a34a' },
+    { name: '붉은옥돔', grade: '희귀', minSize: 32, maxSize: 58, basePrice: 155, color: '#16a34a' },
+    { name: '갈치', grade: '희귀', minSize: 80, maxSize: 160, basePrice: 165, color: '#16a34a' },
+    { name: '하모(갯장어)', grade: '희귀', minSize: 50, maxSize: 110, basePrice: 190, color: '#16a34a' },
+    { name: '군평선이', grade: '희귀', minSize: 20, maxSize: 40, basePrice: 100, color: '#16a34a' },
+    { name: '달고기', grade: '희귀', minSize: 25, maxSize: 50, basePrice: 125, color: '#16a34a' },
+    { name: '놀래기(대형)', grade: '희귀', minSize: 30, maxSize: 55, basePrice: 115, color: '#16a34a' },
+    { name: '자바리', grade: '희귀', minSize: 40, maxSize: 85, basePrice: 240, color: '#16a34a' },
+    { name: '점성어', grade: '희귀', minSize: 50, maxSize: 100, basePrice: 180, color: '#16a34a' },
+    { name: '홍감성돔', grade: '희귀', minSize: 38, maxSize: 72, basePrice: 185, color: '#16a34a' },
+    { name: '벤자리(대형)', grade: '희귀', minSize: 35, maxSize: 65, basePrice: 145, color: '#16a34a' },
+    { name: '참문어', grade: '희귀', minSize: 45, maxSize: 110, basePrice: 210, color: '#16a34a' },
+    { name: '돌문어', grade: '희귀', minSize: 40, maxSize: 95, basePrice: 195, color: '#16a34a' },
+    { name: '꽃게', grade: '희귀', minSize: 15, maxSize: 30, basePrice: 130, color: '#16a34a' },
+    { name: '대왕킹크랩', grade: '희귀', minSize: 40, maxSize: 90, basePrice: 300, color: '#16a34a' },
+    { name: '대게', grade: '희귀', minSize: 30, maxSize: 70, basePrice: 250, color: '#16a34a' },
+    { name: '닭새우', grade: '희귀', minSize: 20, maxSize: 45, basePrice: 220, color: '#16a34a' },
+    { name: '펄딱새우', grade: '희귀', minSize: 15, maxSize: 35, basePrice: 170, color: '#16a34a' },
+    { name: '바닷가재', grade: '희귀', minSize: 35, maxSize: 75, basePrice: 290, color: '#16a34a' },
+    { name: '참가자미', grade: '희귀', minSize: 30, maxSize: 60, basePrice: 135, color: '#16a34a' },
 
+    // --- 영웅 어류 (Heroic) ---
     { name: '방어', grade: '영웅', minSize: 80, maxSize: 150, basePrice: 450, color: '#2563eb' },
     { name: '참치', grade: '영웅', minSize: 120, maxSize: 250, basePrice: 750, color: '#2563eb' },
     { name: '황새치', grade: '영웅', minSize: 150, maxSize: 300, basePrice: 1100, color: '#2563eb' },
@@ -65,18 +111,56 @@ const FISH_DATABASE = [
     { name: '대왕문어', grade: '영웅', minSize: 150, maxSize: 350, basePrice: 1300, color: '#2563eb' },
     { name: '흑기흉상어', grade: '영웅', minSize: 180, maxSize: 380, basePrice: 1450, color: '#2563eb' },
     { name: '홍어', grade: '영웅', minSize: 100, maxSize: 220, basePrice: 900, color: '#2563eb' },
+    { name: '부시리', grade: '영웅', minSize: 90, maxSize: 170, basePrice: 520, color: '#2563eb' },
+    { name: '청새치', grade: '영웅', minSize: 160, maxSize: 340, basePrice: 1250, color: '#2563eb' },
+    { name: '백새치', grade: '영웅', minSize: 170, maxSize: 360, basePrice: 1350, color: '#2563eb' },
+    { name: '만새기', grade: '영웅', minSize: 100, maxSize: 200, basePrice: 600, color: '#2563eb' },
+    { name: '귀상어', grade: '영웅', minSize: 210, maxSize: 420, basePrice: 1750, color: '#2563eb' },
+    { name: '개복치', grade: '영웅', minSize: 150, maxSize: 300, basePrice: 950, color: '#2563eb' },
+    { name: '황가자미(대형)', grade: '영웅', minSize: 80, maxSize: 160, basePrice: 550, color: '#2563eb' },
+    { name: '참다랑어', grade: '영웅', minSize: 140, maxSize: 280, basePrice: 1400, color: '#2563eb' },
+    { name: '눈다랑어', grade: '영웅', minSize: 120, maxSize: 240, basePrice: 1000, color: '#2563eb' },
+    { name: '황다랑어', grade: '영웅', minSize: 110, maxSize: 230, basePrice: 920, color: '#2563eb' },
+    { name: '점박이물범', grade: '영웅', minSize: 120, maxSize: 200, basePrice: 1650, color: '#2563eb' },
+    { name: '바다거북', grade: '영웅', minSize: 90, maxSize: 180, basePrice: 1150, color: '#2563eb' },
+    { name: '대왕가오리', grade: '영웅', minSize: 180, maxSize: 350, basePrice: 1500, color: '#2563eb' },
+    { name: '쥐가오리', grade: '영웅', minSize: 200, maxSize: 400, basePrice: 1800, color: '#2563eb' },
+    { name: '노랑가오리', grade: '영웅', minSize: 100, maxSize: 210, basePrice: 700, color: '#2563eb' },
+    { name: '전기뱀장어(바다형)', grade: '영웅', minSize: 150, maxSize: 280, basePrice: 1100, color: '#2563eb' },
+    { name: '큰돌고래', grade: '영웅', minSize: 220, maxSize: 380, basePrice: 1900, color: '#2563eb' },
+    { name: '범고래상어(새끼)', grade: '영웅', minSize: 250, maxSize: 450, basePrice: 2200, color: '#2563eb' },
 
+    // --- 전설 어류 (Legendary) ---
     { name: '대왕오징어', grade: '전설', minSize: 350, maxSize: 700, basePrice: 4500, color: '#9333ea' },
     { name: '심해 아귀', grade: '전설', minSize: 400, maxSize: 800, basePrice: 7000, color: '#9333ea' },
     { name: '백상아리', grade: '전설', minSize: 450, maxSize: 900, basePrice: 11000, color: '#9333ea' },
     { name: '범고래', grade: '전설', minSize: 500, maxSize: 1000, basePrice: 15000, color: '#9333ea' },
     { name: '향고래', grade: '전설', minSize: 700, maxSize: 1400, basePrice: 22000, color: '#9333ea' },
     { name: '실러캔스', grade: '전설', minSize: 300, maxSize: 650, basePrice: 13500, color: '#9333ea' },
+    { name: '산갈치', grade: '전설', minSize: 400, maxSize: 900, basePrice: 9500, color: '#9333ea' },
+    { name: '고래상어', grade: '전설', minSize: 800, maxSize: 1600, basePrice: 30000, color: '#9333ea' },
+    { name: '메가마우스 상어', grade: '전설', minSize: 450, maxSize: 850, basePrice: 16000, color: '#9333ea' },
+    { name: '남방검치상어', grade: '전설', minSize: 500, maxSize: 950, basePrice: 18500, color: '#9333ea' },
+    { name: '콜로설 칼마르', grade: '전설', minSize: 400, maxSize: 900, basePrice: 19000, color: '#9333ea' },
+    { name: '심해 흡혈오징어', grade: '전설', minSize: 200, maxSize: 500, basePrice: 6500, color: '#9333ea' },
+    { name: '바다악어(거대종)', grade: '전설', minSize: 550, maxSize: 1100, basePrice: 24000, color: '#9333ea' },
+    { name: '대왕고래(새끼)', grade: '전설', minSize: 900, maxSize: 1800, basePrice: 35000, color: '#9333ea' },
+    { name: '북극고래', grade: '전설', minSize: 1000, maxSize: 2000, basePrice: 40000, color: '#9333ea' },
+    { name: '혹등고래', grade: '전설', minSize: 1100, maxSize: 2200, basePrice: 45000, color: '#9333ea' },
+    { name: '귀신고래', grade: '전설', minSize: 1050, maxSize: 2100, basePrice: 42000, color: '#9333ea' },
+    { name: '뱀파이어 상어', grade: '전설', minSize: 480, maxSize: 920, basePrice: 20000, color: '#9333ea' },
+    { name: '환상속의 심해 거북', grade: '전설', minSize: 600, maxSize: 1200, basePrice: 25000, color: '#9333ea' },
+    { name: '심해 랜턴피시 킹', grade: '전설', minSize: 350, maxSize: 750, basePrice: 12500, color: '#9333ea' },
 
+    // --- 신화 어류 (Mythical) ---
     { name: '메갈로돈', grade: '신화', minSize: 900, maxSize: 1800, basePrice: 150000, color: '#ea580c' },
     { name: '크라켄', grade: '신화', minSize: 2200, maxSize: 6000, basePrice: 800000, color: '#dc2626' },
     { name: '레비아탄', grade: '신화', minSize: 3000, maxSize: 9000, basePrice: 2000000, color: '#b91c1c' },
-    { name: '아스피도켈론', grade: '신화', minSize: 4000, maxSize: 12000, basePrice: 5000000, color: '#7f1d1d' }
+    { name: '아스피도켈론', grade: '신화', minSize: 4000, maxSize: 12000, basePrice: 5000000, color: '#7f1d1d' },
+    { name: '요르문간드(심해분신)', grade: '신화', minSize: 5000, maxSize: 15000, basePrice: 8000000, color: '#450a0a' },
+    { name: '아스파스(고대 심해 군주)', grade: '신화', minSize: 4500, maxSize: 13000, basePrice: 6500000, color: '#581c87' },
+    { name: '카이토스(원시 해수)', grade: '신화', minSize: 4800, maxSize: 14000, basePrice: 7500000, color: '#3b0764' },
+    { name: '세계수의 심해 가디언', grade: '신화', minSize: 5500, maxSize: 16000, basePrice: 10000000, color: '#1e1b4b' }
 ];
 
 const MYTHICAL_BEASTS = [
@@ -1030,7 +1114,7 @@ async function renderFishingView(contentArea) {
                 if (fishName === '붕') {
                     calculatedPrice = 1000000;
                 } else if (fishName === '길냥이의 물고기') {
-                    calculatedPrice = size; // size holds the rod cost amount
+                    calculatedPrice = size;
                 } else {
                     let baseUnit = baseFish ? baseFish.basePrice : 20;
                     calculatedPrice = Math.floor(baseUnit * (size / 10));
@@ -1452,7 +1536,7 @@ async function sellFish(fishName, index) {
     if (fishName === '붕') {
         sellPrice = 1000000;
     } else if (fishName === '길냥이의 물고기') {
-        sellPrice = targetSize; // targetSize holds the rod cost amount
+        sellPrice = targetSize;
     } else {
         let baseFish = FISH_DATABASE.find(f => f.name === fishName);
         let baseUnit = baseFish ? baseFish.basePrice : 20;
@@ -1524,16 +1608,14 @@ async function upgradeRod() {
     window.scrollTo(0, currentScroll);
 }
 
-// 🐱 파산 시 현재 낚싯대 1회 던지기 비용 가치의 '길냥이의 물고기' 획득
 async function claimChance() {
     let currentScroll = window.scrollY;
     let currentRod = ROD_TIERS[fishingData.rod_level];
-    let rodCost = currentRod.cost; // 현재 낚싯대 1회 던지기 비용
+    let rodCost = currentRod.cost;
 
     if (!fishingData.fish_inventory['길냥이의 물고기']) {
         fishingData.fish_inventory['길냥이의 물고기'] = [];
     }
-    // size에 1회 던지기 비용을 담아 판매 시 해당 금액만큼 획득하도록 설정
     fishingData.fish_inventory['길냥이의 물고기'].push({ size: rodCost, dagon: false });
 
     await saveFishingData();
