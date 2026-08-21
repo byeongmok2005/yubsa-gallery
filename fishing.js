@@ -28,6 +28,8 @@ let biteTimer = null;
 let floatingAlertText = ""; 
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
 let bahamutAutoActive = true; 
+let recentCaughtFishHistory = []; // 같은 물고기 연속 중복 방지 버퍼
+let currentRecordFilter = 'all'; // 어류 도감 필터 상태 ('all', '일반', '희귀', '영웅', '전설', '신화', '태초', 'unobtained')
 
 const MAX_COMPASS_LEVEL = 24; // 나침반 최대 레벨 24 (은화는 무한 상승)
 
@@ -197,9 +199,14 @@ const MYTHICAL_BEASTS = [
 
 const GRADE_PRIORITY = { '태초': 8, '특수': 7, '영물': 6, '신화': 5, '전설': 4, '영웅': 3, '희귀': 2, '일반': 1 };
 
-function getFishBasePrice(fishName, size) {
-    if (fishName === '붕') return 1000000;
-    if (fishName === '길냥이의 물고기') return size;
+function getFishPriceDetails(fishName, size) {
+    if (fishName === '붕') {
+        return { rawPrice: 1000000, coinBonus: 0, coinLv: 0, coinPct: 0, subtotal: 1000000, hasCarp: false, finalPrice: 1000000 };
+    }
+    if (fishName === '길냥이의 물고기') {
+        let p = Number(size) || 80;
+        return { rawPrice: p, coinBonus: 0, coinLv: 0, coinPct: 0, subtotal: p, hasCarp: false, finalPrice: p };
+    }
     
     let baseFish = FISH_DATABASE.find(f => f.name === fishName);
     let baseUnit = baseFish ? baseFish.basePrice : 20;
@@ -212,9 +219,28 @@ function getFishBasePrice(fishName, size) {
         multiplier = 3;  
     }
     
-    let rawPrice = Math.floor(baseUnit * size * multiplier);
-    let coinBonusMultiplier = 1 + ((fishingData.silver_coin_level || 0) * 0.03);
-    return Math.floor(rawPrice * coinBonusMultiplier);
+    let rawPrice = Math.floor(baseUnit * Number(size) * multiplier);
+    let coinLv = fishingData.silver_coin_level || 0;
+    let coinPct = coinLv * 3;
+    let coinBonus = Math.floor(rawPrice * (coinPct / 100));
+    let subtotal = rawPrice + coinBonus;
+
+    let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
+    let finalPrice = hasCarp ? subtotal * 2 : subtotal;
+
+    return {
+        rawPrice: rawPrice,
+        coinBonus: coinBonus,
+        coinLv: coinLv,
+        coinPct: coinPct,
+        subtotal: subtotal,
+        hasCarp: hasCarp,
+        finalPrice: finalPrice
+    };
+}
+
+function getFishBasePrice(fishName, size) {
+    return getFishPriceDetails(fishName, size).finalPrice;
 }
 
 function getObfuscatedName(name) {
@@ -238,9 +264,13 @@ function getObfuscatedName(name) {
 
 function parseFishItem(item) {
     if (typeof item === 'object' && item !== null) {
-        return { size: Number(item.size), dagon: !!item.dagon };
+        let sz = Number(item.size);
+        let bSz = item.baseSize !== undefined ? Number(item.baseSize) : sz;
+        let iBonus = item.ichthioBonus !== undefined ? Number(item.ichthioBonus) : 0;
+        return { size: sz, baseSize: bSz, ichthioBonus: iBonus, dagon: !!item.dagon };
     }
-    return { size: Number(item), dagon: false };
+    let sz = Number(item);
+    return { size: sz, baseSize: sz, ichthioBonus: 0, dagon: false };
 }
 
 function hasInventoryFish() {
@@ -516,7 +546,9 @@ function startBahamutAutoFishing() {
 
         let caught = executeCatchLogic();
         if (caught) {
-            showFloatingAlert(`🌍 [바하무트] 자동으로 대어(${caught.name} ${caught.size}자)를 낚아 올렸습니다!`);
+            let sizeMsg = caught.displaySize || `${caught.size}자`;
+            let priceMsg = caught.displayPrice ? ` [💰 ${caught.displayPrice}]` : '';
+            showFloatingAlert(`🌍 [바하무트] 자동으로 대어(${caught.name} ${sizeMsg})${priceMsg}를 낚아 올렸습니다!`);
         }
     }, 30000);
 }
@@ -1141,6 +1173,14 @@ async function executeFinalRoomTrade(partnerName, partnerFish, partnerMoney) {
     showTradeResultPopup(gaveFishStr, gaveMoneyStr, gotFishStr, gotMoneyStr);
 }
 
+function setRecordFilter(filter) {
+    currentRecordFilter = filter;
+    let currentScroll = window.scrollY;
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
+}
+
 async function renderFishingView(contentArea) {
     let currentRod = ROD_TIERS[fishingData.rod_level];
     let nextRod = ROD_TIERS[fishingData.rod_level + 1];
@@ -1255,20 +1295,47 @@ async function renderFishingView(contentArea) {
                 let size = parsed.size;
                 let isDagonItem = parsed.dagon;
 
-                let calculatedPrice = getFishBasePrice(fishName, size);
-                let finalPrice = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? calculatedPrice * 2 : calculatedPrice; 
+                let priceInfo = getFishPriceDetails(fishName, size);
+                let finalPrice = priceInfo.finalPrice;
+
                 let carpBadge = (hasCarp && fishName !== '붕' && fishName !== '길냥이의 물고기') ? `<span style="color: #d97706; font-size: 0.7rem; font-weight: 800; background: #fef3c7; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">✨등용문 2배</span>` : ``;
                 let dagonBadge = isDagonItem ? `<span style="color: #78716c; font-size: 0.7rem; font-weight: 800; background: #f5f5f4; border: 1px solid #d6d3d1; padding: 2px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;">[다곤]</span>` : ``;
                 
                 let makaraFeedBtn = hasMakara ? `<button class="btn-back" onclick="feedMakara('${fishName}', ${index})" style="font-size: 0.8rem; padding: 6px 10px; background: #ecfdf5; color: #047857; font-weight: 700;">🌊 마카라 주기</button>` : ``;
 
-                let itemDisplayName = fishName === '길냥이의 물고기' ? `길냥이의 물고기 (낚싯대 1회 비용)` : `${fishName} (${size}자)`;
+                // 크기 표시: 기본 + 익티오 능력 보너스 분리 표기
+                let sizeDisplayHtml = "";
+                if (fishName === '길냥이의 물고기') {
+                    sizeDisplayHtml = `길냥이의 물고기 (낚싯대 1회 비용)`;
+                } else if (fishName === '붕') {
+                    sizeDisplayHtml = `붕 (999.9자)`;
+                } else if (parsed.ichthioBonus > 0) {
+                    sizeDisplayHtml = `${fishName} <b>${parsed.baseSize}자+${parsed.ichthioBonus}자</b> <span style="font-size: 0.75rem; color: #7c3aed; font-weight: 700;">(익티오 10% / 총 ${parsed.size}자)</span>`;
+                } else {
+                    sizeDisplayHtml = `${fishName} (${size}자)`;
+                }
+
+                // 금액 표시: 기본 + 은화 보너스 분리 표기
+                let priceDisplayHtml = "";
+                if (fishName === '붕') {
+                    priceDisplayHtml = `판매가: <b style="color: #d946ef;">1,000,000원</b>`;
+                } else if (fishName === '길냥이의 물고기') {
+                    priceDisplayHtml = `판매가: <b style="color: #16a34a;">${finalPrice.toLocaleString()}원</b>`;
+                } else {
+                    let coinBonusStr = priceInfo.coinBonus > 0 
+                        ? `<span style="color: #d97706; font-size: 0.75rem; font-weight: 700;"> + ${priceInfo.coinBonus.toLocaleString()}원(은화 Lv.${priceInfo.coinLv} +${priceInfo.coinPct}%)</span>` 
+                        : ``;
+                    let totalStr = (priceInfo.coinBonus > 0 || priceInfo.hasCarp)
+                        ? ` = <b style="color: #16a34a; font-size: 0.85rem;">${finalPrice.toLocaleString()}원</b>`
+                        : ` <b style="color: #16a34a;">${finalPrice.toLocaleString()}원</b>`;
+                    priceDisplayHtml = `판매가: <b style="color: #334155;">${priceInfo.rawPrice.toLocaleString()}원</b>${coinBonusStr}${totalStr}`;
+                }
 
                 inventoryHtml += `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
                         <div>
-                            <span style="font-weight: 700; font-size: 0.95rem;">${icon} ${itemDisplayName} <span style="font-size: 0.75rem; color: ${color}; font-weight: 800;">[${grade}]</span>${dagonBadge}${carpBadge}</span>
-                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">판매가: <b style="color: #16a34a;">${finalPrice.toLocaleString()}원</b></div>
+                            <span style="font-weight: 700; font-size: 0.95rem;">${icon} ${sizeDisplayHtml} <span style="font-size: 0.75rem; color: ${color}; font-weight: 800;">[${grade}]</span>${dagonBadge}${carpBadge}</span>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">${priceDisplayHtml}</div>
                         </div>
                         <div style="display: flex; gap: 6px;">
                             ${makaraFeedBtn}
@@ -1280,29 +1347,121 @@ async function renderFishingView(contentArea) {
         }
     }
 
-    let sortedRecords = [];
-    if (fishingData.fish_records) {
-        sortedRecords = Object.entries(fishingData.fish_records).sort((a, b) => {
-            let pA = GRADE_PRIORITY[a[1].grade] || 0;
-            let pB = GRADE_PRIORITY[b[1].grade] || 0;
-            return pB - pA;
+    // --- 📖 어류 도감 완성도 계산 및 렌더링 ---
+    let totalFishCount = FISH_DATABASE.length; // 122종
+    let discoveredNames = Object.keys(fishingData.fish_records || {}).filter(k => k !== '길냥이의 물고기' && k !== '붕');
+    let totalDiscoveredCount = discoveredNames.length;
+    let overallProgressPct = ((totalDiscoveredCount / totalFishCount) * 100).toFixed(1);
+
+    const gradesList = ['일반', '희귀', '영웅', '전설', '신화', '태초'];
+    const gradeColors = {
+        '일반': '#64748b',
+        '희귀': '#16a34a',
+        '영웅': '#2563eb',
+        '전설': '#9333ea',
+        '신화': '#ea580c',
+        '태초': '#06b6d4'
+    };
+
+    let gradeStats = {};
+    gradesList.forEach(g => {
+        let totalInGrade = FISH_DATABASE.filter(f => f.grade === g).length;
+        let discInGrade = FISH_DATABASE.filter(f => f.grade === g && fishingData.fish_records && fishingData.fish_records[f.name]).length;
+        let pct = totalInGrade > 0 ? ((discInGrade / totalInGrade) * 100).toFixed(0) : 0;
+        gradeStats[g] = { total: totalInGrade, count: discInGrade, pct: pct };
+    });
+
+    let gradeBadgesHtml = gradesList.map(g => {
+        let stat = gradeStats[g];
+        let color = gradeColors[g];
+        let isSelected = currentRecordFilter === g;
+        let activeBorder = isSelected ? `border: 2px solid ${color}; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.08);` : `border: 1px solid #cbd5e1; opacity: 0.9;`;
+        return `
+            <button onclick="setRecordFilter('${g}')" style="background: #f8fafc; ${activeBorder} border-radius: 8px; padding: 6px 4px; cursor: pointer; text-align: center; flex: 1; min-width: 58px;">
+                <div style="font-size: 0.7rem; color: ${color}; font-weight: 800;">${g}</div>
+                <div style="font-size: 0.8rem; font-weight: 800; color: #1e293b; margin-top: 1px;">${stat.count}/${stat.total}</div>
+                <div style="font-size: 0.65rem; color: #64748b;">${stat.pct}%</div>
+            </button>
+        `;
+    }).join('');
+
+    let filterChipsHtml = `
+        <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px;">
+            <button onclick="setRecordFilter('all')" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-weight: 700; cursor: pointer; background: ${currentRecordFilter === 'all' ? '#0284c7; color: white;' : '#f8fafc; color: #334155;'}">전체 보기</button>
+            <button onclick="setRecordFilter('unobtained')" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-weight: 700; cursor: pointer; background: ${currentRecordFilter === 'unobtained' ? '#e11d48; color: white;' : '#f8fafc; color: #334155;'}">미발견 어류만</button>
+        </div>
+    `;
+
+    // 어류 도감 필터링
+    let filteredFishList = [];
+    if (currentRecordFilter === 'all') {
+        filteredFishList = FISH_DATABASE;
+    } else if (currentRecordFilter === 'unobtained') {
+        filteredFishList = FISH_DATABASE.filter(f => !fishingData.fish_records || !fishingData.fish_records[f.name]);
+    } else {
+        filteredFishList = FISH_DATABASE.filter(f => f.grade === currentRecordFilter);
+    }
+
+    let recordsListHtml = "";
+    if (filteredFishList.length === 0) {
+        recordsListHtml = `<p class="empty-msg" style="padding: 10px 0;">해당 조건의 어류가 없습니다.</p>`;
+    } else {
+        filteredFishList.forEach(fish => {
+            let record = fishingData.fish_records ? fishingData.fish_records[fish.name] : null;
+            let isDiscovered = !!record;
+            let color = fish.color || '#64748b';
+
+            if (isDiscovered) {
+                let maxSz = record.maxSize;
+                let bSz = record.baseSize !== undefined ? record.baseSize : maxSz;
+                let iBonus = record.ichthioBonus !== undefined ? record.ichthioBonus : 0;
+                let sizeDetailStr = iBonus > 0 
+                    ? `<b style="color: var(--accent);">${maxSz}자</b> <span style="font-size: 0.7rem; color: #7c3aed; font-weight: 700;">(${bSz}자+${iBonus}자)</span>` 
+                    : `<b style="color: var(--accent);">${maxSz}자</b>`;
+
+                recordsListHtml += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.88rem; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                        <div>
+                            <span style="font-weight: 800; color: #1e293b;">🐟 ${fish.name} <span style="color: ${color}; font-weight: 800; font-size: 0.75rem; margin-left: 4px; background: #f1f5f9; padding: 2px 5px; border-radius: 4px;">[${fish.grade}]</span></span>
+                            <div style="font-size: 0.75rem; color: #64748b; margin-top: 3px;">기본 범위: ${fish.minSize} ~ ${fish.maxSize}자 · 단가: ${fish.basePrice}G</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.75rem; color: #475569;">최고 기록: ${sizeDetailStr}</div>
+                            <span style="display: inline-block; margin-top: 2px; font-size: 0.65rem; color: #16a34a; font-weight: 800; background: #dcfce7; padding: 1px 5px; border-radius: 4px;">✓ 발견 완료</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                recordsListHtml += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-left: 5px solid #94a3b8; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.88rem; opacity: 0.75;">
+                        <div>
+                            <span style="font-weight: 700; color: #64748b;">❓ ??? (미지의 어류) <span style="color: ${color}; font-weight: 800; font-size: 0.75rem; margin-left: 4px; background: #f1f5f9; padding: 2px 5px; border-radius: 4px;">[${fish.grade}]</span></span>
+                            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 3px;">예상 크기: ${fish.minSize} ~ ${fish.maxSize}자</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">🔒 미발견</span>
+                        </div>
+                    </div>
+                `;
+            }
         });
     }
 
-    let recordsHtml = "";
-    if (sortedRecords.length === 0) {
-        recordsHtml = `<p class="empty-msg" style="padding: 10px 0;">아직 등록된 어류 도감이 없습니다.</p>`;
-    } else {
-        sortedRecords.forEach(([fishName, record]) => {
-            let icon = fishName === '붕' ? '🦅' : '🐟';
-            let color = fishName === '붕' ? '#d946ef' : (FISH_DATABASE.find(f => f.name === fishName)?.color || '#64748b');
-            recordsHtml += `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.9rem;">
-                    <span style="font-weight: 700; color: #1e293b;">${icon} ${fishName} <span style="color: ${color}; font-weight: 800; margin-left: 4px;">[${record.grade}]</span></span>
-                    <span style="color: #475569;">역대 최고 기록: <b style="color: var(--accent);">${record.maxSize}자</b></span>
+    // 특수 신수 '붕' 기록이 있는 경우 도감 상단에 노출
+    if (fishingData.fish_records && fishingData.fish_records['붕'] && (currentRecordFilter === 'all' || currentRecordFilter === '신화' || currentRecordFilter === '태초')) {
+        let bRec = fishingData.fish_records['붕'];
+        recordsListHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #fdf4ff; border: 1px solid #f0abfc; border-left: 5px solid #d946ef; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.88rem;">
+                <div>
+                    <span style="font-weight: 800; color: #86198f;">🦅 붕 <span style="color: #d946ef; font-weight: 800; font-size: 0.75rem; margin-left: 4px; background: #fae8ff; padding: 2px 5px; border-radius: 4px;">[특수 영물 변신]</span></span>
+                    <div style="font-size: 0.75rem; color: #a21caf; margin-top: 3px;">곤(鯤)의 변신 신수 · 판매가: 1,000,000원</div>
                 </div>
-            `;
-        });
+                <div style="text-align: right;">
+                    <div style="font-size: 0.75rem; color: #86198f;">최고 기록: <b style="color: #c026d3;">${bRec.maxSize}자</b></div>
+                    <span style="font-size: 0.65rem; color: #86198f; font-weight: 800; background: #f5d0fe; padding: 1px 5px; border-radius: 4px;">✨ 전설의 신수</span>
+                </div>
+            </div>
+        ` + recordsListHtml;
     }
 
     let hasIchthio = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('익티오켄타우로스');
@@ -1416,13 +1575,34 @@ async function renderFishingView(contentArea) {
                 <h3 style="font-size: 1rem; font-weight: 700; margin: 0;">🎒 잡은 물고기 보관고 (판매 가능)</h3>
                 <button onclick="sellAllFish()" style="background: #dc2626; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">🚨 전체 판매</button>
             </div>
-            <div style="display: flex; flex-direction: column; max-height: 200px; overflow-y: auto; margin-bottom: 16px;">
+            <div style="display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; margin-bottom: 16px;">
                 ${inventoryHtml}
             </div>
 
-            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">📖 어류 도감</h3>
-            <div style="display: flex; flex-direction: column; max-height: 180px; overflow-y: auto; margin-bottom: 16px;">
-                ${recordsHtml}
+            <!-- 📖 어류 도감 완성도 섹션 -->
+            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 1rem; font-weight: 900; color: #0f172a;">📖 어류 도감 완성도</span>
+                    <span style="font-size: 0.95rem; font-weight: 900; color: #0284c7;">${totalDiscoveredCount} / ${totalFishCount} 종 (${overallProgressPct}%)</span>
+                </div>
+                
+                <!-- 프로그레스 바 -->
+                <div style="width: 100%; height: 12px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px;">
+                    <div style="width: ${overallProgressPct}%; height: 100%; background: linear-gradient(90deg, #0284c7, #10b981); transition: width 0.4s ease; border-radius: 10px;"></div>
+                </div>
+
+                <!-- 등급별 발견 현황 칩 -->
+                <div style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px;">
+                    ${gradeBadgesHtml}
+                </div>
+
+                <!-- 필터 버튼 -->
+                ${filterChipsHtml}
+
+                <!-- 도감 어류 목록 -->
+                <div style="display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; padding-right: 2px;">
+                    ${recordsListHtml}
+                </div>
             </div>
 
             <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">🏛️ 신비의 영물 도감</h3>
@@ -1462,7 +1642,9 @@ async function startCast() {
         setTimeout(() => {
             if (fishingStep === 'waiting') {
                 let caught = executeCatchLogic();
-                showFloatingAlert(`🎣 [히포캠포스] 대어 낚시 성공! 🐟 ${caught.name} (${caught.size}자)`);
+                let sizeMsg = caught.displaySize || `${caught.size}자`;
+                let priceMsg = caught.displayPrice ? ` [💰 ${caught.displayPrice}]` : '';
+                showFloatingAlert(`🎣 [히포캠포스] 대어 낚시 성공! 🐟 ${caught.name} (${sizeMsg})${priceMsg}`);
                 fishingStep = 'ready';
                 let contentArea = document.getElementById("contentArea");
                 if (contentArea) renderFishingView(contentArea);
@@ -1560,7 +1742,9 @@ async function hookFish() {
     }
 
     let caught = executeCatchLogic();
-    showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${caught.size}자)을(를) 낚았습니다!`);
+    let sizeMsg = caught.displaySize || `${caught.size}자`;
+    let priceMsg = caught.displayPrice ? ` [💰 ${caught.displayPrice}]` : '';
+    showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${sizeMsg})${priceMsg}`);
     
     fishingStep = 'ready';
     let contentArea = document.getElementById("contentArea");
@@ -1568,23 +1752,59 @@ async function hookFish() {
     window.scrollTo(0, currentScroll);
 }
 
+// 🎣 같은 어종 연속 중복 완화 및 균등 등장 선택 함수
+function selectFishFromPool(pool) {
+    if (!pool || pool.length === 0) return FISH_DATABASE[0];
+    if (pool.length <= 2) {
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+    
+    let candidates = pool.filter(f => !recentCaughtFishHistory.includes(f.name));
+    if (candidates.length === 0) candidates = pool;
+    
+    let chosen = candidates[Math.floor(Math.random() * candidates.length)];
+    recentCaughtFishHistory.push(chosen.name);
+    if (recentCaughtFishHistory.length > 5) {
+        recentCaughtFishHistory.shift();
+    }
+    return chosen;
+}
+
 function executeCatchLogic() {
+    // 1. 영물 무작위 랜덤 획득 (단일 롤 & 미해금 영물 중 균등 무작위 선정)
     let unobtainedBeasts = MYTHICAL_BEASTS.filter(b => !fishingData.unlocked_beasts.includes(b.name));
-    for (let beast of unobtainedBeasts) {
-        if (Math.random() * 100 < 0.05) {
+    if (unobtainedBeasts.length > 0) {
+        if (Math.random() * 100 < 0.1) { // 0.1% 확률
+            let randomIndex = Math.floor(Math.random() * unobtainedBeasts.length);
+            let beast = unobtainedBeasts[randomIndex];
             if (!fishingData.unlocked_beasts) fishingData.unlocked_beasts = [];
             fishingData.unlocked_beasts.push(beast.name);
             saveFishingData();
             showFloatingAlert(`✨🏛️ [전설의 영물 발견!] "${beast.name}"을(를) 낚아 올렸습니다!`);
-            break; 
         }
     }
 
+    // 2. 해적 재화 드랍 (은화 및 나침반 파편)
     let coinDropCount = Math.random() < 0.35 ? (Math.floor(Math.random() * 2) + 1) : 0;
     let compassDropCount = Math.random() < 0.35 ? (Math.floor(Math.random() * 2) + 1) : 0;
     if (coinDropCount > 0) fishingData.silver_coins = (fishingData.silver_coins || 0) + coinDropCount;
     if (compassDropCount > 0) fishingData.compass_fragments = (fishingData.compass_fragments || 0) + compassDropCount;
 
+    // 3. 곤(鯤) 보유 시 0.1% 확률로 거대한 전설의 새 '붕'으로 변신
+    let hasKon = fishingData.unlocked_beasts && (fishingData.unlocked_beasts.includes('곤(鯤)') || fishingData.unlocked_beasts.includes('곤'));
+    if (hasKon && Math.random() < 0.001) {
+        let birdSize = 999.9;
+        if (!fishingData.fish_inventory['붕']) fishingData.fish_inventory['붕'] = [];
+        fishingData.fish_inventory['붕'].push({ size: birdSize, baseSize: birdSize, ichthioBonus: 0, dagon: false });
+        if (!fishingData.fish_records['붕']) {
+            fishingData.fish_records['붕'] = { grade: '특수', maxSize: birdSize, baseSize: birdSize, ichthioBonus: 0 };
+        }
+        saveFishingData();
+        showFloatingAlert(`🦅✨ [곤의 전설적 변신!] 거대한 전설의 새 "붕"으로 변신했습니다! (판매가 1,000,000원)`);
+        return { name: '붕', size: birdSize, displaySize: '999.9자', displayPrice: '1,000,000원' };
+    }
+
+    // 4. 등급 확률 계산
     let rand = Math.random() * 100;
     let rodLevel = fishingData.rod_level;
     let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
@@ -1604,43 +1824,63 @@ function executeCatchLogic() {
     let selectedFish;
     if (rodLevel >= 11 && rand < primordialChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '태초');
-        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        selectedFish = selectFishFromPool(pool);
         if (hasMakara) fishingData.makara_primordial_bonus = 0;
     } else if (rodLevel >= 10 && rand < primordialChance + mythicChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '신화');
-        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        selectedFish = selectFishFromPool(pool);
         if (hasMakara) fishingData.makara_bonus_chance = 0;
     } else if (rand < primordialChance + mythicChance + legendaryChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '전설');
-        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        selectedFish = selectFishFromPool(pool);
     } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '영웅');
-        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        selectedFish = selectFishFromPool(pool);
     } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance + rareChance) {
         let pool = FISH_DATABASE.filter(f => f.grade === '희귀');
-        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        selectedFish = selectFishFromPool(pool);
     } else {
         let pool = FISH_DATABASE.filter(f => f.grade === '일반');
-        selectedFish = pool[Math.floor(Math.random() * pool.length)];
+        selectedFish = selectFishFromPool(pool);
     }
 
+    // 5. 물고기 크기 계산 및 익티오켄타우로스 10% 증가 보너스 적용
     let sizeBonus = (rodLevel - 1) * 0.3;
-    let fishSizeRaw = Math.random() * (selectedFish.maxSize - selectedFish.minSize) + selectedFish.minSize + sizeBonus;
-    let fishSize = parseFloat(fishSizeRaw.toFixed(1));
+    let baseFishSizeRaw = Math.random() * (selectedFish.maxSize - selectedFish.minSize) + selectedFish.minSize + sizeBonus;
+    let baseSize = parseFloat(baseFishSizeRaw.toFixed(1));
+
+    let hasIchthio = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('익티오켄타우로스');
+    let ichthioBonus = hasIchthio ? parseFloat((baseSize * 0.1).toFixed(1)) : 0;
+    let totalSize = parseFloat((baseSize + ichthioBonus).toFixed(1));
     let fishName = selectedFish.name;
 
+    // 보관고에 저장
     if (!fishingData.fish_inventory[fishName]) fishingData.fish_inventory[fishName] = [];
-    fishingData.fish_inventory[fishName].push({ size: fishSize, dagon: false });
+    fishingData.fish_inventory[fishName].push({ 
+        size: totalSize, 
+        baseSize: baseSize, 
+        ichthioBonus: ichthioBonus, 
+        dagon: false 
+    });
 
+    // 어류 도감 최고 기록 갱신
     let recordGrade = selectedFish.grade;
     if (!fishingData.fish_records[fishName]) {
-        fishingData.fish_records[fishName] = { grade: recordGrade, maxSize: fishSize };
-    } else if (fishSize > fishingData.fish_records[fishName].maxSize) {
-        fishingData.fish_records[fishName].maxSize = fishSize;
+        fishingData.fish_records[fishName] = { 
+            grade: recordGrade, 
+            maxSize: totalSize, 
+            baseSize: baseSize, 
+            ichthioBonus: ichthioBonus 
+        };
+    } else if (totalSize > fishingData.fish_records[fishName].maxSize) {
+        fishingData.fish_records[fishName].maxSize = totalSize;
+        fishingData.fish_records[fishName].baseSize = baseSize;
+        fishingData.fish_records[fishName].ichthioBonus = ichthioBonus;
     }
 
     saveFishingData();
 
+    // 6. 다곤 상호 계약 동기화
     let hasMyDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
     if (hasMyDagon && fishingData.dagon_partner && fishingData.is_dagon_mutual) {
         let partnerName = fishingData.dagon_partner;
@@ -1648,13 +1888,20 @@ function executeCatchLogic() {
             if (partnerRow && partnerRow.unlocked_beasts && partnerRow.unlocked_beasts.includes('다곤') && partnerRow.dagon_partner === currentUser) {
                 let pInv = partnerRow.fish_inventory || {};
                 if (!pInv[fishName]) pInv[fishName] = [];
-                pInv[fishName].push({ size: fishSize, dagon: true });
+                pInv[fishName].push({ 
+                    size: totalSize, 
+                    baseSize: baseSize, 
+                    ichthioBonus: ichthioBonus, 
+                    dagon: true 
+                });
 
                 let pRec = partnerRow.fish_records || {};
                 if (!pRec[fishName]) {
-                    pRec[fishName] = { grade: recordGrade, maxSize: fishSize };
-                } else if (fishSize > pRec[fishName].maxSize) {
-                    pRec[fishName].maxSize = fishSize;
+                    pRec[fishName] = { grade: recordGrade, maxSize: totalSize, baseSize: baseSize, ichthioBonus: ichthioBonus };
+                } else if (totalSize > pRec[fishName].maxSize) {
+                    pRec[fishName].maxSize = totalSize;
+                    pRec[fishName].baseSize = baseSize;
+                    pRec[fishName].ichthioBonus = ichthioBonus;
                 }
 
                 await supabaseClient.from('user_fishing_data').update({
@@ -1666,7 +1913,24 @@ function executeCatchLogic() {
         });
     }
 
-    return { name: fishName, size: fishSize };
+    // 상세 금액 계산
+    let priceDetails = getFishPriceDetails(fishName, totalSize);
+    let displaySize = hasIchthio 
+        ? `${baseSize}자+${ichthioBonus}자(익티오 10%)` 
+        : `${totalSize}자`;
+    let displayPrice = priceDetails.coinBonus > 0 
+        ? `${priceDetails.rawPrice.toLocaleString()}+${priceDetails.coinBonus.toLocaleString()}원` 
+        : `${priceDetails.finalPrice.toLocaleString()}원`;
+
+    return { 
+        name: fishName, 
+        size: totalSize, 
+        baseSize: baseSize,
+        ichthioBonus: ichthioBonus,
+        displaySize: displaySize, 
+        displayPrice: displayPrice,
+        priceDetails: priceDetails
+    };
 }
 
 async function feedMakara(fishName, index) {
@@ -1709,17 +1973,8 @@ async function sellFish(fishName, index) {
 
     let parsed = parseFishItem(sizesArr[index]);
     let targetSize = parsed.size; 
-    let sellPrice = 0;
-    let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
-
-    if (fishName === '붕') {
-        sellPrice = 1000000;
-    } else if (fishName === '길냥이의 물고기') {
-        sellPrice = targetSize;
-    } else {
-        let calculatedBase = getFishBasePrice(fishName, targetSize);
-        sellPrice = hasCarp ? calculatedBase * 2 : calculatedBase;
-    }
+    let priceInfo = getFishPriceDetails(fishName, targetSize);
+    let sellPrice = priceInfo.finalPrice;
 
     sizesArr.splice(index, 1);
     if (sizesArr.length === 0) delete fishingData.fish_inventory[fishName];
@@ -1735,21 +1990,14 @@ async function sellFish(fishName, index) {
 async function sellAllFish() {
     let currentScroll = window.scrollY;
     let totalSell = 0;
-    let hasCarp = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('등용문 잉어');
 
     for (let [fishName, sizesArr] of Object.entries(fishingData.fish_inventory)) {
         if (!sizesArr) continue;
 
         sizesArr.forEach(item => {
             let parsed = parseFishItem(item);
-            if (fishName === '붕') {
-                totalSell += 1000000;
-            } else if (fishName === '길냥이의 물고기') {
-                totalSell += parsed.size;
-            } else {
-                let calculatedBase = getFishBasePrice(fishName, parsed.size);
-                totalSell += hasCarp ? calculatedBase * 2 : calculatedBase;
-            }
+            let priceInfo = getFishPriceDetails(fishName, parsed.size);
+            totalSell += priceInfo.finalPrice;
         });
     }
 
@@ -1791,7 +2039,7 @@ async function claimChance() {
     if (!fishingData.fish_inventory['길냥이의 물고기']) {
         fishingData.fish_inventory['길냥이의 물고기'] = [];
     }
-    fishingData.fish_inventory['길냥이의 물고기'].push({ size: rodCost, dagon: false });
+    fishingData.fish_inventory['길냥이의 물고기'].push({ size: rodCost, baseSize: rodCost, ichthioBonus: 0, dagon: false });
 
     await saveFishingData();
     showFloatingAlert(`🐱 길냥이에게 낚싯대 1회 비용(${rodCost.toLocaleString()}원)어치 물고기를 뺏어왔습니다!`);
@@ -1826,3 +2074,4 @@ window.rejectIncomingTrade = rejectIncomingTrade;
 window.openTradeRoom = openTradeRoom;
 window.executeFinalRoomTrade = executeFinalRoomTrade;
 window.toggleBahamutAuto = toggleBahamutAuto;
+window.setRecordFilter = setRecordFilter;
