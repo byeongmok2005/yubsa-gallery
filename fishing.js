@@ -1,8 +1,9 @@
-// fishing.js - 심해 낚시터 (태초 등급, 11·12단계 조 단위 낚싯대, 은화 무한 상승 및 나침반 24레벨 만렙 적용 버전)
+// fishing.js - 심해 낚시터 (7대 낚시터, 170+종 생물 도감, 태초 등급, 11·12단계 조 단위 낚싯대, 은화 무한 상승 및 나침반 24레벨 만렙 적용 버전)
 
 let fishingData = { 
     money: 1000, 
     rod_level: 1, 
+    current_spot: '연못',
     fish_records: {}, 
     fish_inventory: {}, 
     unlocked_beasts: [], 
@@ -29,7 +30,8 @@ let floatingAlertText = "";
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
 let bahamutAutoActive = true; 
 let recentCaughtFishHistory = []; // 같은 물고기 연속 중복 방지 버퍼
-let currentRecordFilter = 'all'; // 어류 도감 필터 상태 ('all', '일반', '희귀', '영웅', '전설', '신화', '태초', 'unobtained')
+let currentRecordFilter = 'all'; // 어류 도감 등급 필터 상태 ('all', '일반', '희귀', '영웅', '전설', '신화', '태초', 'unobtained')
+let currentSpotFilter = 'all';   // 어류 도감 서식지 필터 상태 ('all', '연못', '계곡', '저수지', '갯벌', '바다', '깊은바다', '절대자 김병수의 어항')
 
 const MAX_COMPASS_LEVEL = 24; // 나침반 최대 레벨 24 (은화는 무한 상승)
 
@@ -48,140 +50,263 @@ const ROD_TIERS = {
     12: { name: '⚛️ 태초의 창조주 오메가 낚시대 (최종)', price: 100000000000000, cost: 2500000 }
 };
 
+// 🗺️ 7대 고유 낚시터 테마 및 설정
+const FISHING_SPOTS = {
+    '연못': {
+        name: '연못',
+        icon: '🪷',
+        desc: '평화로운 연꽃 향기 사이로 개구리와 민물고기들이 뛰노는 맑은 연못',
+        bgGradient: 'linear-gradient(135deg, #064e3b, #047857, #0f766e)',
+        textColor: '#ecfdf5',
+        themeColor: '#10b981',
+        cardBg: '#ecfdf5',
+        badge: '🌿 초심자의 쉼터'
+    },
+    '계곡': {
+        name: '계곡',
+        icon: '🏞️',
+        desc: '울창한 숲속 맑고 시원한 계곡물, 가재와 산천어가 서식하는 청정 구역',
+        bgGradient: 'linear-gradient(135deg, #0e7490, #0891b2, #06b6d4)',
+        textColor: '#ecfeff',
+        themeColor: '#06b6d4',
+        cardBg: '#ecfeff',
+        badge: '🌊 청정 1급수'
+    },
+    '저수지': {
+        name: '저수지',
+        icon: '🌾',
+        desc: '깊고 짙은 물속 거대한 메기와 가물치가 숨어있는 안개 자욱한 대형 저수지',
+        bgGradient: 'linear-gradient(135deg, #1e3a8a, #1d4ed8, #2563eb)',
+        textColor: '#eff6ff',
+        themeColor: '#3b82f6',
+        cardBg: '#eff6ff',
+        badge: '🎣 대물 낚시의 성지'
+    },
+    '갯벌': {
+        name: '갯벌',
+        icon: '🦀',
+        desc: '조수간만의 차로 드러나는 광활한 갯벌! 낙지, 조개, 짱뚱어의 천국',
+        bgGradient: 'linear-gradient(135deg, #78350f, #92400e, #d97706)',
+        textColor: '#fffbeb',
+        themeColor: '#d97706',
+        cardBg: '#fffbeb',
+        badge: '🐚 생명의 보물창고'
+    },
+    '바다': {
+        name: '바다',
+        icon: '🌊',
+        desc: '푸른 파도와 갈매기 소리, 참돔과 방어, 참치가 헤엄치는 탁 트인 연안 바다',
+        bgGradient: 'linear-gradient(135deg, #0369a1, #0284c7, #38bdf8)',
+        textColor: '#f0f9ff',
+        themeColor: '#0284c7',
+        cardBg: '#f0f9ff',
+        badge: '⚓ 광활한 푸른 바다'
+    },
+    '깊은바다': {
+        name: '깊은바다',
+        icon: '🌌',
+        desc: '빛조차 닿지 않는 암흑의 심해 심연! 기괴한 발광생물과 전설의 거수들이 사는 곳',
+        bgGradient: 'linear-gradient(135deg, #090d16, #1e1b4b, #312e81)',
+        textColor: '#faf5ff',
+        themeColor: '#8b5cf6',
+        cardBg: '#faf5ff',
+        badge: '👁️ 심해의 심연'
+    },
+    '절대자 김병수의 어항': {
+        name: '절대자 김병수의 어항',
+        icon: '👑',
+        desc: '절대자 김병수가 시공간을 초월하여 창조한 태초 생물들의 성역 (11단계 낚싯대 이상 입장 가능)',
+        bgGradient: 'linear-gradient(135deg, #18002a, #3b0764, #701a75, #b45309)',
+        textColor: '#fefce8',
+        themeColor: '#eab308',
+        cardBg: '#fefce8',
+        badge: '⚛️ 태초 전용 성역',
+        minRodLevel: 11
+    }
+};
+
 const FISH_DATABASE = [
-    // --- 일반 어류 (Common) ---
-    { name: '정어리', grade: '일반', minSize: 0.3, maxSize: 0.7, basePrice: 12, color: '#64748b' },
-    { name: '고등어', grade: '일반', minSize: 0.6, maxSize: 1.2, basePrice: 25, color: '#64748b' },
-    { name: '오징어', grade: '일반', minSize: 0.6, maxSize: 1.5, basePrice: 35, color: '#64748b' },
-    { name: '멸치 떼', grade: '일반', minSize: 0.2, maxSize: 0.5, basePrice: 10, color: '#64748b' },
-    { name: '전갱이', grade: '일반', minSize: 0.5, maxSize: 1.0, basePrice: 20, color: '#64748b' },
-    { name: '학꽁치', grade: '일반', minSize: 0.6, maxSize: 1.1, basePrice: 28, color: '#64748b' },
-    { name: '볼락', grade: '일반', minSize: 0.5, maxSize: 1.1, basePrice: 30, color: '#64748b' },
-    { name: '양미리', grade: '일반', minSize: 0.3, maxSize: 0.8, basePrice: 15, color: '#64748b' },
-    { name: '청어', grade: '일반', minSize: 0.5, maxSize: 1.0, basePrice: 22, color: '#64748b' },
-    { name: '전어', grade: '일반', minSize: 0.4, maxSize: 0.9, basePrice: 18, color: '#64748b' },
-    { name: '삼치', grade: '일반', minSize: 1.0, maxSize: 2.2, basePrice: 40, color: '#64748b' },
-    { name: '숭어', grade: '일반', minSize: 0.8, maxSize: 1.9, basePrice: 32, color: '#64748b' },
-    { name: '망둥어', grade: '일반', minSize: 0.3, maxSize: 0.7, basePrice: 14, color: '#64748b' },
-    { name: '복어', grade: '일반', minSize: 0.5, maxSize: 1.0, basePrice: 38, color: '#64748b' },
-    { name: '쏨뱅이', grade: '일반', minSize: 0.5, maxSize: 1.1, basePrice: 33, color: '#64748b' },
-    { name: '노래미', grade: '일반', minSize: 0.6, maxSize: 1.3, basePrice: 27, color: '#64748b' },
-    { name: '황돔', grade: '일반', minSize: 0.6, maxSize: 1.1, basePrice: 36, color: '#64748b' },
-    { name: '자리돔', grade: '일반', minSize: 0.3, maxSize: 0.6, basePrice: 16, color: '#64748b' },
-    { name: '벤자리', grade: '일반', minSize: 0.6, maxSize: 1.4, basePrice: 39, color: '#64748b' },
-    { name: '독가시치', grade: '일반', minSize: 0.5, maxSize: 1.0, basePrice: 24, color: '#64748b' },
-    { name: '망상어', grade: '일반', minSize: 0.4, maxSize: 0.8, basePrice: 19, color: '#64748b' },
-    { name: '까나리', grade: '일반', minSize: 0.3, maxSize: 0.6, basePrice: 11, color: '#64748b' },
-    { name: '꼼치', grade: '일반', minSize: 0.6, maxSize: 1.6, basePrice: 29, color: '#64748b' },
-    { name: '도루묵', grade: '일반', minSize: 0.5, maxSize: 0.9, basePrice: 21, color: '#64748b' },
-    { name: '양태', grade: '일반', minSize: 0.8, maxSize: 1.8, basePrice: 34, color: '#64748b' },
-    { name: '쥐치', grade: '일반', minSize: 0.5, maxSize: 1.1, basePrice: 37, color: '#64748b' },
-    { name: '말쥐치', grade: '일반', minSize: 0.6, maxSize: 1.3, basePrice: 42, color: '#64748b' },
-    { name: '붕장어(아나고)', grade: '일반', minSize: 1.0, maxSize: 2.2, basePrice: 45, color: '#64748b' },
-    { name: '도다리', grade: '일반', minSize: 0.6, maxSize: 1.4, basePrice: 38, color: '#64748b' },
-    { name: '성대', grade: '일반', minSize: 0.6, maxSize: 1.2, basePrice: 30, color: '#64748b' },
+    // ================= [1. 🪷 연못 (Pond) 서식 생물] =================
+    { name: '올챙이', grade: '일반', spots: ['연못'], minSize: 0.1, maxSize: 0.3, basePrice: 160, color: '#64748b' },
+    { name: '참개구리', grade: '일반', spots: ['연못'], minSize: 0.3, maxSize: 0.7, basePrice: 220, color: '#64748b' },
+    { name: '청개구리', grade: '일반', spots: ['연못'], minSize: 0.2, maxSize: 0.5, basePrice: 210, color: '#64748b' },
+    { name: '송사리', grade: '일반', spots: ['연못', '계곡'], minSize: 0.2, maxSize: 0.4, basePrice: 150, color: '#64748b' },
+    { name: '논우렁이', grade: '일반', spots: ['연못'], minSize: 0.2, maxSize: 0.5, basePrice: 180, color: '#64748b' },
+    { name: '물자라', grade: '일반', spots: ['연못'], minSize: 0.3, maxSize: 0.6, basePrice: 190, color: '#64748b' },
+    { name: '소금쟁이', grade: '일반', spots: ['연못', '계곡'], minSize: 0.2, maxSize: 0.4, basePrice: 150, color: '#64748b' },
+    { name: '물방개', grade: '일반', spots: ['연못'], minSize: 0.3, maxSize: 0.6, basePrice: 230, color: '#64748b' },
+    { name: '연못 피라미', grade: '일반', spots: ['연못'], minSize: 0.4, maxSize: 0.8, basePrice: 200, color: '#64748b' },
+    { name: '연못 잔붕어', grade: '일반', spots: ['연못'], minSize: 0.4, maxSize: 0.9, basePrice: 220, color: '#64748b' },
+    { name: '황소개구리', grade: '희귀', spots: ['연못'], minSize: 0.8, maxSize: 1.8, basePrice: 1400, color: '#16a34a' },
+    { name: '비단잉어', grade: '희귀', spots: ['연못'], minSize: 1.2, maxSize: 2.5, basePrice: 1800, color: '#16a34a' },
+    { name: '붉은귀거북', grade: '희귀', spots: ['연못'], minSize: 0.8, maxSize: 1.6, basePrice: 1500, color: '#16a34a' },
+    { name: '연못 떡붕어', grade: '희귀', spots: ['연못'], minSize: 1.0, maxSize: 2.2, basePrice: 1400, color: '#16a34a' },
+    { name: '오색 금붕어', grade: '희귀', spots: ['연못'], minSize: 0.5, maxSize: 1.2, basePrice: 1300, color: '#16a34a' },
+    { name: '토종 말조개', grade: '희귀', spots: ['연못', '저수지'], minSize: 0.6, maxSize: 1.4, basePrice: 1350, color: '#16a34a' },
+    { name: '황금 비단잉어', grade: '영웅', spots: ['연못'], minSize: 2.5, maxSize: 5.0, basePrice: 14000, color: '#2563eb' },
+    { name: '대왕 황소개구리', grade: '영웅', spots: ['연못'], minSize: 2.0, maxSize: 4.0, basePrice: 11000, color: '#2563eb' },
+    { name: '연꽃 자라', grade: '영웅', spots: ['연못'], minSize: 2.0, maxSize: 4.5, basePrice: 15000, color: '#2563eb' },
+    { name: '거대 가물치(연못왕)', grade: '영웅', spots: ['연못'], minSize: 2.5, maxSize: 5.5, basePrice: 18000, color: '#2563eb' },
+    { name: '천년 묵은 남생이', grade: '전설', spots: ['연못'], minSize: 8.0, maxSize: 18.0, basePrice: 180000, color: '#9333ea' },
+    { name: '연못의 수호룡 이무기', grade: '전설', spots: ['연못'], minSize: 12.0, maxSize: 25.0, basePrice: 250000, color: '#9333ea' },
+    { name: '옥황상제의 연꽃 백련어', grade: '신화', spots: ['연못'], minSize: 30.0, maxSize: 70.0, basePrice: 2800000, color: '#ea580c' },
 
-    // --- 희귀 어류 (Rare) ---
-    { name: '광어', grade: '희귀', minSize: 1.3, maxSize: 2.6, basePrice: 95, color: '#16a34a' },
-    { name: '우럭', grade: '희귀', minSize: 1.0, maxSize: 2.0, basePrice: 110, color: '#16a34a' },
-    { name: '참돔', grade: '희귀', minSize: 1.5, maxSize: 3.0, basePrice: 150, color: '#16a34a' },
-    { name: '문어', grade: '희귀', minSize: 1.6, maxSize: 3.5, basePrice: 200, color: '#16a34a' },
-    { name: '농어', grade: '희귀', minSize: 1.6, maxSize: 3.3, basePrice: 130, color: '#16a34a' },
-    { name: '돌돔', grade: '희귀', minSize: 1.2, maxSize: 2.3, basePrice: 160, color: '#16a34a' },
-    { name: '갑오징어', grade: '희귀', minSize: 0.8, maxSize: 1.8, basePrice: 120, color: '#16a34a' },
-    { name: '감성돔', grade: '희귀', minSize: 1.3, maxSize: 2.5, basePrice: 175, color: '#16a34a' },
-    { name: '능성어', grade: '희귀', minSize: 1.5, maxSize: 3.1, basePrice: 220, color: '#16a34a' },
-    { name: '민어', grade: '희귀', minSize: 2.0, maxSize: 4.0, basePrice: 280, color: '#16a34a' },
-    { name: '옥돔', grade: '희귀', minSize: 1.0, maxSize: 1.8, basePrice: 140, color: '#16a34a' },
-    { name: '붉은옥돔', grade: '희귀', minSize: 1.1, maxSize: 1.9, basePrice: 155, color: '#16a34a' },
-    { name: '갈치', grade: '희귀', minSize: 2.0, maxSize: 4.5, basePrice: 165, color: '#16a34a' },
-    { name: '하모(갯장어)', grade: '희귀', minSize: 1.6, maxSize: 3.5, basePrice: 190, color: '#16a34a' },
-    { name: '군평선이', grade: '희귀', minSize: 0.7, maxSize: 1.3, basePrice: 100, color: '#16a34a' },
-    { name: '달고기', grade: '희귀', minSize: 0.8, maxSize: 1.6, basePrice: 125, color: '#16a34a' },
-    { name: '놀래기(대형)', grade: '희귀', minSize: 1.0, maxSize: 1.8, basePrice: 115, color: '#16a34a' },
-    { name: '자바리', grade: '희귀', minSize: 1.3, maxSize: 2.8, basePrice: 240, color: '#16a34a' },
-    { name: '점성어', grade: '희귀', minSize: 1.6, maxSize: 3.3, basePrice: 180, color: '#16a34a' },
-    { name: '홍감성돔', grade: '희귀', minSize: 1.3, maxSize: 2.4, basePrice: 185, color: '#16a34a' },
-    { name: '벤자리(대형)', grade: '희귀', minSize: 1.2, maxSize: 2.1, basePrice: 145, color: '#16a34a' },
-    { name: '참문어', grade: '희귀', minSize: 1.5, maxSize: 3.5, basePrice: 210, color: '#16a34a' },
-    { name: '돌문어', grade: '희귀', minSize: 1.3, maxSize: 3.0, basePrice: 195, color: '#16a34a' },
-    { name: '꽃게', grade: '희귀', minSize: 0.5, maxSize: 1.0, basePrice: 130, color: '#16a34a' },
-    { name: '대왕킹크랩', grade: '희귀', minSize: 1.3, maxSize: 3.0, basePrice: 300, color: '#16a34a' },
-    { name: '대게', grade: '희귀', minSize: 1.0, maxSize: 2.3, basePrice: 250, color: '#16a34a' },
-    { name: '닭새우', grade: '희귀', minSize: 0.7, maxSize: 1.5, basePrice: 220, color: '#16a34a' },
-    { name: '펄딱새우', grade: '희귀', minSize: 0.5, maxSize: 1.2, basePrice: 170, color: '#16a34a' },
-    { name: '바닷가재', grade: '희귀', minSize: 1.2, maxSize: 2.5, basePrice: 290, color: '#16a34a' },
-    { name: '참가자미', grade: '희귀', minSize: 1.0, maxSize: 2.0, basePrice: 135, color: '#16a34a' },
+    // ================= [2. 🏞️ 계곡 (Valley) 서식 생물] =================
+    { name: '버들치', grade: '일반', spots: ['계곡'], minSize: 0.3, maxSize: 0.7, basePrice: 210, color: '#64748b' },
+    { name: '갈겨니', grade: '일반', spots: ['계곡'], minSize: 0.4, maxSize: 0.8, basePrice: 230, color: '#64748b' },
+    { name: '참다슬기', grade: '일반', spots: ['계곡'], minSize: 0.2, maxSize: 0.4, basePrice: 170, color: '#64748b' },
+    { name: '돌고기', grade: '일반', spots: ['계곡'], minSize: 0.4, maxSize: 0.9, basePrice: 220, color: '#64748b' },
+    { name: '쉬리', grade: '일반', spots: ['계곡'], minSize: 0.4, maxSize: 0.8, basePrice: 280, color: '#64748b' },
+    { name: '참갈겨니', grade: '일반', spots: ['계곡'], minSize: 0.4, maxSize: 0.9, basePrice: 240, color: '#64748b' },
+    { name: '모래무지', grade: '일반', spots: ['계곡'], minSize: 0.4, maxSize: 0.8, basePrice: 200, color: '#64748b' },
+    { name: '밀어', grade: '일반', spots: ['계곡'], minSize: 0.3, maxSize: 0.6, basePrice: 190, color: '#64748b' },
+    { name: '도롱뇽', grade: '일반', spots: ['계곡'], minSize: 0.3, maxSize: 0.7, basePrice: 260, color: '#64748b' },
+    { name: '강도래 유충', grade: '일반', spots: ['계곡'], minSize: 0.2, maxSize: 0.5, basePrice: 160, color: '#64748b' },
+    { name: '토종 참가재', grade: '희귀', spots: ['계곡'], minSize: 0.6, maxSize: 1.3, basePrice: 1600, color: '#16a34a' },
+    { name: '꺽지', grade: '희귀', spots: ['계곡'], minSize: 0.8, maxSize: 1.8, basePrice: 1900, color: '#16a34a' },
+    { name: '산천어', grade: '희귀', spots: ['계곡'], minSize: 1.0, maxSize: 2.2, basePrice: 2200, color: '#16a34a' },
+    { name: '열목어', grade: '희귀', spots: ['계곡'], minSize: 1.2, maxSize: 2.6, basePrice: 2500, color: '#16a34a' },
+    { name: '금강모치', grade: '희귀', spots: ['계곡'], minSize: 0.6, maxSize: 1.4, basePrice: 1400, color: '#16a34a' },
+    { name: '민물참게', grade: '희귀', spots: ['계곡'], minSize: 0.7, maxSize: 1.5, basePrice: 1750, color: '#16a34a' },
+    { name: '뚝지', grade: '희귀', spots: ['계곡'], minSize: 0.6, maxSize: 1.3, basePrice: 1500, color: '#16a34a' },
+    { name: '대왕 붉은가재', grade: '영웅', spots: ['계곡'], minSize: 2.0, maxSize: 4.5, basePrice: 12000, color: '#2563eb' },
+    { name: '황금 꺽지', grade: '영웅', spots: ['계곡'], minSize: 2.2, maxSize: 4.8, basePrice: 15000, color: '#2563eb' },
+    { name: '산골짝 거대 도롱뇽', grade: '영웅', spots: ['계곡'], minSize: 2.5, maxSize: 5.5, basePrice: 16000, color: '#2563eb' },
+    { name: '심산유곡 은어 떼', grade: '영웅', spots: ['계곡'], minSize: 2.5, maxSize: 5.0, basePrice: 14000, color: '#2563eb' },
+    { name: '영험한 백색 열목어', grade: '전설', spots: ['계곡'], minSize: 10.0, maxSize: 22.0, basePrice: 200000, color: '#9333ea' },
+    { name: '계곡의 지배자 괴물 쏘가리', grade: '전설', spots: ['계곡'], minSize: 12.0, maxSize: 25.0, basePrice: 260000, color: '#9333ea' },
+    { name: '계곡의 정령 청룡어', grade: '신화', spots: ['계곡'], minSize: 40.0, maxSize: 90.0, basePrice: 3500000, color: '#ea580c' },
 
-    // --- 영웅 어류 (Heroic) ---
-    { name: '방어', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 450, color: '#2563eb' },
-    { name: '참치', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 750, color: '#2563eb' },
-    { name: '황새치', grade: '영웅', minSize: 3.0, maxSize: 6.5, basePrice: 1100, color: '#2563eb' },
-    { name: '청상아리', grade: '영웅', minSize: 3.5, maxSize: 7.5, basePrice: 1600, color: '#2563eb' },
-    { name: '다금바리', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 850, color: '#2563eb' },
-    { name: '대왕문어', grade: '영웅', minSize: 3.0, maxSize: 7.0, basePrice: 1300, color: '#2563eb' },
-    { name: '흑기흉상어', grade: '영웅', minSize: 3.5, maxSize: 7.5, basePrice: 1450, color: '#2563eb' },
-    { name: '홍어', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 900, color: '#2563eb' },
-    { name: '부시리', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 520, color: '#2563eb' },
-    { name: '청새치', grade: '영웅', minSize: 3.0, maxSize: 7.0, basePrice: 1250, color: '#2563eb' },
-    { name: '백새치', grade: '영웅', minSize: 3.0, maxSize: 7.0, basePrice: 1350, color: '#2563eb' },
-    { name: '만새기', grade: '영웅', minSize: 2.5, maxSize: 5.0, basePrice: 600, color: '#2563eb' },
-    { name: '귀상어', grade: '영웅', minSize: 4.0, maxSize: 8.5, basePrice: 1750, color: '#2563eb' },
-    { name: '개복치', grade: '영웅', minSize: 3.0, maxSize: 6.5, basePrice: 950, color: '#2563eb' },
-    { name: '황가자미(대형)', grade: '영웅', minSize: 2.0, maxSize: 4.5, basePrice: 550, color: '#2563eb' },
-    { name: '참다랑어', grade: '영웅', minSize: 3.0, maxSize: 6.5, basePrice: 1400, color: '#2563eb' },
-    { name: '눈다랑어', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 1000, color: '#2563eb' },
-    { name: '황다랑어', grade: '영웅', minSize: 2.5, maxSize: 5.5, basePrice: 920, color: '#2563eb' },
-    { name: '점박이물범', grade: '영웅', minSize: 3.0, maxSize: 6.0, basePrice: 1650, color: '#2563eb' },
-    { name: '바다거북', grade: '영웅', minSize: 2.5, maxSize: 5.0, basePrice: 1150, color: '#2563eb' },
-    { name: '대왕가오리', grade: '영웅', minSize: 3.5, maxSize: 7.5, basePrice: 1500, color: '#2563eb' },
-    { name: '쥐가오리', grade: '영웅', minSize: 3.5, maxSize: 8.0, basePrice: 1800, color: '#2563eb' },
-    { name: '노랑가오리', grade: '영웅', minSize: 2.5, maxSize: 5.0, basePrice: 700, color: '#2563eb' },
-    { name: '전기뱀장어(바다형)', grade: '영웅', minSize: 3.0, maxSize: 6.0, basePrice: 1100, color: '#2563eb' },
-    { name: '큰돌고래', grade: '영웅', minSize: 4.0, maxSize: 9.0, basePrice: 1900, color: '#2563eb' },
-    { name: '범고래상어(새끼)', grade: '영웅', minSize: 4.5, maxSize: 10.0, basePrice: 2200, color: '#2563eb' },
+    // ================= [3. 🌾 저수지 (Reservoir) 서식 생물] =================
+    { name: '큰입배스', grade: '일반', spots: ['저수지'], minSize: 0.6, maxSize: 1.3, basePrice: 270, color: '#64748b' },
+    { name: '파랑볼우럭(블루길)', grade: '일반', spots: ['저수지'], minSize: 0.4, maxSize: 0.8, basePrice: 200, color: '#64748b' },
+    { name: '참미꾸라지', grade: '일반', spots: ['저수지'], minSize: 0.3, maxSize: 0.7, basePrice: 190, color: '#64748b' },
+    { name: '토종 참붕어', grade: '일반', spots: ['저수지'], minSize: 0.6, maxSize: 1.2, basePrice: 250, color: '#64748b' },
+    { name: '저수지 잉어', grade: '일반', spots: ['저수지'], minSize: 0.8, maxSize: 1.8, basePrice: 310, color: '#64748b' },
+    { name: '동자개(빠가사리)', grade: '일반', spots: ['저수지'], minSize: 0.5, maxSize: 1.1, basePrice: 280, color: '#64748b' },
+    { name: '민물 메기', grade: '일반', spots: ['저수지'], minSize: 0.7, maxSize: 1.6, basePrice: 340, color: '#64748b' },
+    { name: '누치', grade: '일반', spots: ['저수지'], minSize: 0.6, maxSize: 1.4, basePrice: 260, color: '#64748b' },
+    { name: '살치', grade: '일반', spots: ['저수지'], minSize: 0.4, maxSize: 0.9, basePrice: 210, color: '#64748b' },
+    { name: '각시납줄개', grade: '일반', spots: ['저수지'], minSize: 0.3, maxSize: 0.7, basePrice: 190, color: '#64748b' },
+    { name: '황쏘가리', grade: '희귀', spots: ['저수지'], minSize: 1.2, maxSize: 2.6, basePrice: 2600, color: '#16a34a' },
+    { name: '토종 가물치', grade: '희귀', spots: ['저수지'], minSize: 1.5, maxSize: 3.2, basePrice: 2400, color: '#16a34a' },
+    { name: '풍천 민물장어', grade: '희귀', spots: ['저수지'], minSize: 1.5, maxSize: 3.5, basePrice: 2800, color: '#16a34a' },
+    { name: '대형 월척 떡붕어', grade: '희귀', spots: ['저수지'], minSize: 1.2, maxSize: 2.4, basePrice: 1800, color: '#16a34a' },
+    { name: '붉은 점박이 메기', grade: '희귀', spots: ['저수지'], minSize: 1.3, maxSize: 2.8, basePrice: 2100, color: '#16a34a' },
+    { name: '저수지 자라', grade: '희귀', spots: ['저수지'], minSize: 1.0, maxSize: 2.2, basePrice: 2300, color: '#16a34a' },
+    { name: '끄리', grade: '희귀', spots: ['저수지'], minSize: 0.9, maxSize: 2.0, basePrice: 1600, color: '#16a34a' },
+    { name: '괴물배스(런커)', grade: '영웅', spots: ['저수지'], minSize: 2.5, maxSize: 5.5, basePrice: 15000, color: '#2563eb' },
+    { name: '1미터 거대 가물치', grade: '영웅', spots: ['저수지'], minSize: 3.0, maxSize: 6.5, basePrice: 19000, color: '#2563eb' },
+    { name: '백색 민물장어', grade: '영웅', spots: ['저수지'], minSize: 3.0, maxSize: 6.0, basePrice: 22000, color: '#2563eb' },
+    { name: '저수지 괴물 메기', grade: '영웅', spots: ['저수지'], minSize: 3.5, maxSize: 7.0, basePrice: 20000, color: '#2563eb' },
+    { name: '안개 저수지 괴담어', grade: '전설', spots: ['저수지'], minSize: 12.0, maxSize: 28.0, basePrice: 240000, color: '#9333ea' },
+    { name: '백년 묵은 거대 자라왕', grade: '전설', spots: ['저수지'], minSize: 15.0, maxSize: 32.0, basePrice: 280000, color: '#9333ea' },
+    { name: '안개속 거대 철갑상어', grade: '전설', spots: ['저수지'], minSize: 16.0, maxSize: 35.0, basePrice: 320000, color: '#9333ea' },
+    { name: '안개 저수지의 수룡(水龍)', grade: '신화', spots: ['저수지'], minSize: 50.0, maxSize: 120.0, basePrice: 4800000, color: '#ea580c' },
 
-    // --- 전설 어류 (Legendary) ---
-    { name: '대왕오징어', grade: '전설', minSize: 11.6, maxSize: 23.3, basePrice: 4500, color: '#9333ea' },
-    { name: '심해 아귀', grade: '전설', minSize: 13.3, maxSize: 26.6, basePrice: 7000, color: '#9333ea' },
-    { name: '백상아리', grade: '전설', minSize: 15.0, maxSize: 30.0, basePrice: 11000, color: '#9333ea' },
-    { name: '범고래', grade: '전설', minSize: 16.6, maxSize: 33.3, basePrice: 15000, color: '#9333ea' },
-    { name: '향고래', grade: '전설', minSize: 20.0, maxSize: 40.0, basePrice: 22000, color: '#9333ea' },
-    { name: '실러캔스', grade: '전설', minSize: 10.0, maxSize: 21.6, basePrice: 13500, color: '#9333ea' },
-    { name: '산갈치', grade: '전설', minSize: 12.0, maxSize: 25.0, basePrice: 9500, color: '#9333ea' },
-    { name: '고래상어', grade: '전설', minSize: 20.0, maxSize: 45.0, basePrice: 30000, color: '#9333ea' },
-    { name: '메가마우스 상어', grade: '전설', minSize: 15.0, maxSize: 28.3, basePrice: 16000, color: '#9333ea' },
-    { name: '남방검치상어', grade: '전설', minSize: 16.6, maxSize: 31.6, basePrice: 18500, color: '#9333ea' },
-    { name: '콜로설 칼마르', grade: '전설', minSize: 13.3, maxSize: 30.0, basePrice: 19000, color: '#9333ea' },
-    { name: '심해 흡혈오징어', grade: '전설', minSize: 6.6, maxSize: 16.6, basePrice: 6500, color: '#9333ea' },
-    { name: '바다악어(거대종)', grade: '전설', minSize: 18.3, maxSize: 36.6, basePrice: 24000, color: '#9333ea' },
-    { name: '대왕고래(새끼)', grade: '전설', minSize: 25.0, maxSize: 50.0, basePrice: 35000, color: '#9333ea' },
-    { name: '북극고래', grade: '전설', minSize: 25.0, maxSize: 55.0, basePrice: 40000, color: '#9333ea' },
-    { name: '혹등고래', grade: '전설', minSize: 25.0, maxSize: 60.0, basePrice: 45000, color: '#9333ea' },
-    { name: '귀신고래', grade: '전설', minSize: 25.0, maxSize: 55.0, basePrice: 42000, color: '#9333ea' },
-    { name: '뱀파이어 상어', grade: '전설', minSize: 16.0, maxSize: 30.6, basePrice: 20000, color: '#9333ea' },
-    { name: '환상속의 심해 거북', grade: '전설', minSize: 20.0, maxSize: 40.0, basePrice: 25000, color: '#9333ea' },
-    { name: '심해 랜턴피시 킹', grade: '전설', minSize: 11.6, maxSize: 25.0, basePrice: 12500, color: '#9333ea' },
+    // ================= [4. 🦀 갯벌 (Mudflat) 서식 생물] =================
+    { name: '짱뚱어', grade: '일반', spots: ['갯벌'], minSize: 0.4, maxSize: 0.9, basePrice: 240, color: '#64748b' },
+    { name: '칠게', grade: '일반', spots: ['갯벌'], minSize: 0.3, maxSize: 0.6, basePrice: 180, color: '#64748b' },
+    { name: '바지락', grade: '일반', spots: ['갯벌'], minSize: 0.2, maxSize: 0.4, basePrice: 160, color: '#64748b' },
+    { name: '대나무 맛조개', grade: '일반', spots: ['갯벌'], minSize: 0.3, maxSize: 0.7, basePrice: 220, color: '#64748b' },
+    { name: '바다 갯지렁이', grade: '일반', spots: ['갯벌'], minSize: 0.3, maxSize: 0.8, basePrice: 170, color: '#64748b' },
+    { name: '갯가재', grade: '일반', spots: ['갯벌'], minSize: 0.4, maxSize: 0.9, basePrice: 230, color: '#64748b' },
+    { name: '갯벌 문절망둑(망둥어)', grade: '일반', spots: ['갯벌'], minSize: 0.4, maxSize: 0.8, basePrice: 200, color: '#64748b' },
+    { name: '동죽조개', grade: '일반', spots: ['갯벌'], minSize: 0.2, maxSize: 0.5, basePrice: 170, color: '#64748b' },
+    { name: '벌교 참꼬막', grade: '일반', spots: ['갯벌'], minSize: 0.2, maxSize: 0.5, basePrice: 190, color: '#64748b' },
+    { name: '갯벌 쏙', grade: '일반', spots: ['갯벌'], minSize: 0.3, maxSize: 0.7, basePrice: 210, color: '#64748b' },
+    { name: '붉은발 농게', grade: '희귀', spots: ['갯벌'], minSize: 0.6, maxSize: 1.4, basePrice: 1500, color: '#16a34a' },
+    { name: '갯벌 뻘낙지', grade: '희귀', spots: ['갯벌'], minSize: 1.2, maxSize: 2.8, basePrice: 2500, color: '#16a34a' },
+    { name: '대형 피조개', grade: '희귀', spots: ['갯벌'], minSize: 0.6, maxSize: 1.3, basePrice: 1700, color: '#16a34a' },
+    { name: '백합조개', grade: '희귀', spots: ['갯벌'], minSize: 0.6, maxSize: 1.4, basePrice: 1900, color: '#16a34a' },
+    { name: '자연산 참소라', grade: '희귀', spots: ['갯벌'], minSize: 0.7, maxSize: 1.6, basePrice: 2000, color: '#16a34a' },
+    { name: '박하지(돌게)', grade: '희귀', spots: ['갯벌'], minSize: 0.7, maxSize: 1.5, basePrice: 1600, color: '#16a34a' },
+    { name: '가리맛조개', grade: '희귀', spots: ['갯벌'], minSize: 0.8, maxSize: 1.8, basePrice: 1800, color: '#16a34a' },
+    { name: '대왕 뻘낙지', grade: '영웅', spots: ['갯벌'], minSize: 2.5, maxSize: 5.5, basePrice: 16000, color: '#2563eb' },
+    { name: '황금 짱뚱어', grade: '영웅', spots: ['갯벌'], minSize: 2.0, maxSize: 4.5, basePrice: 13000, color: '#2563eb' },
+    { name: '거대 뻘 붕장어', grade: '영웅', spots: ['갯벌'], minSize: 2.8, maxSize: 6.0, basePrice: 18000, color: '#2563eb' },
+    { name: '칠게 군주', grade: '영웅', spots: ['갯벌'], minSize: 2.2, maxSize: 4.8, basePrice: 15000, color: '#2563eb' },
+    { name: '갯벌의 지배자 대왕 갯지렁이', grade: '전설', spots: ['갯벌'], minSize: 10.0, maxSize: 25.0, basePrice: 200000, color: '#9333ea' },
+    { name: '천년 묵은 대왕 참소라', grade: '전설', spots: ['갯벌'], minSize: 12.0, maxSize: 26.0, basePrice: 250000, color: '#9333ea' },
+    { name: '조수간만의 군주 뻘크라켄', grade: '신화', spots: ['갯벌'], minSize: 45.0, maxSize: 110.0, basePrice: 4200000, color: '#ea580c' },
 
-    // --- 신화 어류 (Mythical) - 10단계 이상 등장 ---
-    { name: '메갈로돈', grade: '신화', minSize: 30.0, maxSize: 60.0, basePrice: 150000, color: '#ea580c' },
-    { name: '크라켄', grade: '신화', minSize: 50.0, maxSize: 120.0, basePrice: 800000, color: '#dc2626' },
-    { name: '레비아탄', grade: '신화', minSize: 60.0, maxSize: 150.0, basePrice: 2000000, color: '#b91c1c' },
-    { name: '아스피도켈론', grade: '신화', minSize: 70.0, maxSize: 180.0, basePrice: 5000000, color: '#7f1d1d' },
-    { name: '요르문간드(심해분신)', grade: '신화', minSize: 80.0, maxSize: 200.0, basePrice: 8000000, color: '#450a0a' },
-    { name: '아스파스(고대 심해 군주)', grade: '신화', minSize: 75.0, maxSize: 170.0, basePrice: 6500000, color: '#581c87' },
-    { name: '카이토스(원시 해수)', grade: '신화', minSize: 75.0, maxSize: 180.0, basePrice: 7500000, color: '#3b0764' },
-    { name: '세계수의 심해 가디언', grade: '신화', minSize: 90.0, maxSize: 220.0, basePrice: 10000000, color: '#1e1b4b' },
+    // ================= [5. 🌊 바다 (Sea / Coast) 서식 생물] =================
+    { name: '참고등어', grade: '일반', spots: ['바다'], minSize: 0.6, maxSize: 1.2, basePrice: 260, color: '#64748b' },
+    { name: '전갱이', grade: '일반', spots: ['바다'], minSize: 0.5, maxSize: 1.0, basePrice: 230, color: '#64748b' },
+    { name: '꽁치', grade: '일반', spots: ['바다'], minSize: 0.5, maxSize: 1.0, basePrice: 220, color: '#64748b' },
+    { name: '정어리', grade: '일반', spots: ['바다'], minSize: 0.3, maxSize: 0.7, basePrice: 180, color: '#64748b' },
+    { name: '살오징어', grade: '일반', spots: ['바다'], minSize: 0.6, maxSize: 1.4, basePrice: 290, color: '#64748b' },
+    { name: '서해 꽃게', grade: '일반', spots: ['바다'], minSize: 0.5, maxSize: 1.1, basePrice: 300, color: '#64748b' },
+    { name: '삼치', grade: '일반', spots: ['바다'], minSize: 0.8, maxSize: 1.8, basePrice: 330, color: '#64748b' },
+    { name: '학꽁치', grade: '일반', spots: ['바다'], minSize: 0.5, maxSize: 1.0, basePrice: 240, color: '#64748b' },
+    { name: '우럭볼락', grade: '일반', spots: ['바다'], minSize: 0.4, maxSize: 0.9, basePrice: 270, color: '#64748b' },
+    { name: '멸치 떼', grade: '일반', spots: ['바다'], minSize: 0.2, maxSize: 0.5, basePrice: 160, color: '#64748b' },
+    { name: '넙치(자연산 광어)', grade: '희귀', spots: ['바다'], minSize: 1.3, maxSize: 2.8, basePrice: 2200, color: '#16a34a' },
+    { name: '조피볼락(우럭)', grade: '희귀', spots: ['바다'], minSize: 1.1, maxSize: 2.3, basePrice: 2000, color: '#16a34a' },
+    { name: '참돔', grade: '희귀', spots: ['바다'], minSize: 1.4, maxSize: 3.0, basePrice: 2600, color: '#16a34a' },
+    { name: '동해 참문어', grade: '희귀', spots: ['바다'], minSize: 1.5, maxSize: 3.2, basePrice: 2700, color: '#16a34a' },
+    { name: '바다 농어', grade: '희귀', spots: ['바다'], minSize: 1.4, maxSize: 3.0, basePrice: 2100, color: '#16a34a' },
+    { name: '감성돔', grade: '희귀', spots: ['바다'], minSize: 1.2, maxSize: 2.6, basePrice: 2500, color: '#16a34a' },
+    { name: '갑오징어', grade: '희귀', spots: ['바다'], minSize: 0.8, maxSize: 1.8, basePrice: 2300, color: '#16a34a' },
+    { name: '돌돔', grade: '희귀', spots: ['바다'], minSize: 1.2, maxSize: 2.5, basePrice: 2800, color: '#16a34a' },
+    { name: '제주 은갈치', grade: '희귀', spots: ['바다'], minSize: 1.8, maxSize: 4.0, basePrice: 2400, color: '#16a34a' },
+    { name: '바닷가재(로브스터)', grade: '희귀', spots: ['바다'], minSize: 1.2, maxSize: 2.6, basePrice: 2900, color: '#16a34a' },
+    { name: '겨울 대방어', grade: '영웅', spots: ['바다'], minSize: 3.0, maxSize: 7.0, basePrice: 19000, color: '#2563eb' },
+    { name: '태평양 참다랑어', grade: '영웅', spots: ['바다'], minSize: 3.5, maxSize: 7.5, basePrice: 26000, color: '#2563eb' },
+    { name: '황새치', grade: '영웅', spots: ['바다'], minSize: 3.5, maxSize: 7.5, basePrice: 24000, color: '#2563eb' },
+    { name: '청새치', grade: '영웅', spots: ['바다'], minSize: 3.2, maxSize: 7.0, basePrice: 23000, color: '#2563eb' },
+    { name: '제주 다금바리', grade: '영웅', spots: ['바다'], minSize: 2.5, maxSize: 5.5, basePrice: 25000, color: '#2563eb' },
+    { name: '흑기흉상어', grade: '영웅', spots: ['바다'], minSize: 3.5, maxSize: 7.5, basePrice: 22000, color: '#2563eb' },
+    { name: '귀상어', grade: '영웅', spots: ['바다'], minSize: 4.0, maxSize: 8.5, basePrice: 24500, color: '#2563eb' },
+    { name: '달맞이 개복치', grade: '영웅', spots: ['바다'], minSize: 3.0, maxSize: 7.0, basePrice: 20000, color: '#2563eb' },
+    { name: '심해 대왕오징어', grade: '전설', spots: ['바다'], minSize: 12.0, maxSize: 26.0, basePrice: 300000, color: '#9333ea' },
+    { name: '거대 백상아리', grade: '전설', spots: ['바다'], minSize: 15.0, maxSize: 32.0, basePrice: 360000, color: '#9333ea' },
+    { name: '바다의 포식자 범고래', grade: '전설', spots: ['바다'], minSize: 16.0, maxSize: 35.0, basePrice: 390000, color: '#9333ea' },
+    { name: '전설의 산갈치', grade: '전설', spots: ['바다'], minSize: 12.0, maxSize: 28.0, basePrice: 310000, color: '#9333ea' },
+    { name: '심해 패왕 메갈로돈', grade: '신화', spots: ['바다'], minSize: 40.0, maxSize: 90.0, basePrice: 6000000, color: '#ea580c' },
+    { name: '전설의 바다괴수 크라켄', grade: '신화', spots: ['바다'], minSize: 60.0, maxSize: 140.0, basePrice: 8500000, color: '#dc2626' },
 
-    // --- 태초 어류 (Primordial) - 11단계 이상 등장 ---
-    { name: '코스믹 벨루가', grade: '태초', minSize: 400.0, maxSize: 800.0, basePrice: 50000000, color: '#06b6d4' },
-    { name: '초신성 아귀', grade: '태초', minSize: 500.0, maxSize: 1000.0, basePrice: 120000000, color: '#f59e0b' },
-    { name: '뫼비우스 회전 가오리', grade: '태초', minSize: 700.0, maxSize: 1500.0, basePrice: 300000000, color: '#8b5cf6' },
-    { name: '원시의 삼엽충', grade: '태초', minSize: 1000.0, maxSize: 2000.0, basePrice: 800000000, color: '#10b981' },
-    { name: '싱귤래리티 문어', grade: '태초', minSize: 1100.0, maxSize: 2200.0, basePrice: 1500000000, color: '#ef4444' },
-    { name: '황금빛 우주 붕어', grade: '태초', minSize: 1200.0, maxSize: 2500.0, basePrice: 2500000000, color: '#eab308' },
-    { name: '타임리프 틸라피아', grade: '태초', minSize: 1400.0, maxSize: 2800.0, basePrice: 4000000000, color: '#3b82f6' },
-    { name: '차원 균열의 주인 오메가', grade: '태초', minSize: 1500.0, maxSize: 3000.0, basePrice: 8000000000, color: '#dc2626' }
+    // ================= [6. 🌌 깊은바다 (Deep Sea) 서식 생물] =================
+    { name: '심해 랜턴피시', grade: '일반', spots: ['깊은바다'], minSize: 0.3, maxSize: 0.7, basePrice: 250, color: '#64748b' },
+    { name: '투명 유리해파리', grade: '일반', spots: ['깊은바다'], minSize: 0.4, maxSize: 0.8, basePrice: 230, color: '#64748b' },
+    { name: '심해 블롭피시', grade: '일반', spots: ['깊은바다'], minSize: 0.4, maxSize: 0.9, basePrice: 290, color: '#64748b' },
+    { name: '심해 바티노무스', grade: '일반', spots: ['깊은바다'], minSize: 0.4, maxSize: 0.9, basePrice: 310, color: '#64748b' },
+    { name: '심해 도끼고기', grade: '일반', spots: ['깊은바다'], minSize: 0.3, maxSize: 0.6, basePrice: 240, color: '#64748b' },
+    { name: '블랙 드래곤피시', grade: '일반', spots: ['깊은바다'], minSize: 0.4, maxSize: 0.9, basePrice: 280, color: '#64748b' },
+    { name: '심해 꼼치', grade: '일반', spots: ['깊은바다'], minSize: 0.5, maxSize: 1.2, basePrice: 270, color: '#64748b' },
+    { name: '발광 심해 말미잘', grade: '일반', spots: ['깊은바다'], minSize: 0.3, maxSize: 0.7, basePrice: 220, color: '#64748b' },
+    { name: '덤보 문어', grade: '희귀', spots: ['깊은바다'], minSize: 0.8, maxSize: 1.8, basePrice: 2400, color: '#16a34a' },
+    { name: '심해 아귀', grade: '희귀', spots: ['깊은바다'], minSize: 1.2, maxSize: 2.6, basePrice: 2800, color: '#16a34a' },
+    { name: '고대 주름상어', grade: '희귀', spots: ['깊은바다'], minSize: 1.4, maxSize: 3.0, basePrice: 2700, color: '#16a34a' },
+    { name: '세발치', grade: '희귀', spots: ['깊은바다'], minSize: 0.9, maxSize: 2.0, basePrice: 2200, color: '#16a34a' },
+    { name: '펠리컨장어', grade: '희귀', spots: ['깊은바다'], minSize: 1.3, maxSize: 2.8, basePrice: 2600, color: '#16a34a' },
+    { name: '심해 거미게', grade: '희귀', spots: ['깊은바다'], minSize: 1.5, maxSize: 3.5, basePrice: 2900, color: '#16a34a' },
+    { name: '마귀상어(고블린 샤크)', grade: '영웅', spots: ['깊은바다'], minSize: 3.2, maxSize: 7.0, basePrice: 23000, color: '#2563eb' },
+    { name: '메가마우스 상어', grade: '영웅', spots: ['깊은바다'], minSize: 3.5, maxSize: 7.5, basePrice: 25000, color: '#2563eb' },
+    { name: '초거대 바티노무스 킹', grade: '영웅', spots: ['깊은바다'], minSize: 2.5, maxSize: 5.5, basePrice: 20000, color: '#2563eb' },
+    { name: '심해 거대 흡혈오징어 킹', grade: '전설', spots: ['깊은바다'], minSize: 10.0, maxSize: 24.0, basePrice: 320000, color: '#9333ea' },
+    { name: '고대어 실러캔스', grade: '전설', spots: ['깊은바다'], minSize: 12.0, maxSize: 26.0, basePrice: 350000, color: '#9333ea' },
+    { name: '심해의 제왕 향고래', grade: '전설', spots: ['깊은바다'], minSize: 20.0, maxSize: 45.0, basePrice: 430000, color: '#9333ea' },
+    { name: '고대 심해 군주 레비아탄', grade: '신화', spots: ['깊은바다'], minSize: 60.0, maxSize: 150.0, basePrice: 9000000, color: '#b91c1c' },
+    { name: '심해의 신 요르문간드', grade: '신화', spots: ['깊은바다'], minSize: 80.0, maxSize: 180.0, basePrice: 13000000, color: '#450a0a' },
+
+    // ================= [7. 👑 절대자 김병수의 어항 (Cosmic Aquarium - 오직 ⚛️ 태초 등급만 서식, 11단계 이상 전용)] =================
+    { name: '코스믹 벨루가', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 400.0, maxSize: 800.0, basePrice: 50000000, color: '#06b6d4' },
+    { name: '초신성 아귀', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 500.0, maxSize: 1000.0, basePrice: 120000000, color: '#f59e0b' },
+    { name: '뫼비우스 회전 가오리', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 700.0, maxSize: 1500.0, basePrice: 300000000, color: '#8b5cf6' },
+    { name: '원시의 삼엽충', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1000.0, maxSize: 2000.0, basePrice: 800000000, color: '#10b981' },
+    { name: '싱귤래리티 문어', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1100.0, maxSize: 2200.0, basePrice: 1500000000, color: '#ef4444' },
+    { name: '황금빛 우주 붕어', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1200.0, maxSize: 2500.0, basePrice: 2500000000, color: '#eab308' },
+    { name: '타임리프 틸라피아', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1400.0, maxSize: 2800.0, basePrice: 4000000000, color: '#3b82f6' },
+    { name: '차원 균열의 주인 오메가', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1500.0, maxSize: 3000.0, basePrice: 8000000000, color: '#dc2626' },
+    { name: '절대자 김병수의 애완 심해룡', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1600.0, maxSize: 3200.0, basePrice: 12000000000, color: '#9333ea' },
+    { name: '절대자의 코스믹 아로와나', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 1800.0, maxSize: 3500.0, basePrice: 20000000000, color: '#eab308' },
+    { name: '김병수의 혼이 깃든 절대용어', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 2000.0, maxSize: 4000.0, basePrice: 35000000000, color: '#7e22ce' },
+    { name: '어항의 창조신 아스피도켈론', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 2500.0, maxSize: 5000.0, basePrice: 50000000000, color: '#b91c1c' },
+    { name: '초차원 네온 구피 킹', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 100.0, maxSize: 300.0, basePrice: 30000000, color: '#38bdf8' },
+    { name: '양자 도약 디스커스', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 300.0, maxSize: 600.0, basePrice: 40000000, color: '#ec4899' },
+    { name: '병수의 은하수 황금가재', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 500.0, maxSize: 1000.0, basePrice: 150000000, color: '#f59e0b' },
+    { name: '시공간 왜곡 절대가오리', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 800.0, maxSize: 1600.0, basePrice: 500000000, color: '#a855f7' }
 ];
 
 const MYTHICAL_BEASTS = [
@@ -209,17 +334,16 @@ function getFishPriceDetails(fishName, size) {
     }
     
     let baseFish = FISH_DATABASE.find(f => f.name === fishName);
-    let baseUnit = baseFish ? baseFish.basePrice : 20;
-    let grade = baseFish ? baseFish.grade : '일반';
+    let basePrice = baseFish ? baseFish.basePrice : 200;
+    let minSz = baseFish ? baseFish.minSize : 0.5;
+    let maxSz = baseFish ? baseFish.maxSize : 1.5;
     
-    let multiplier = 10; 
-    if (grade === '영웅') {
-        multiplier = 5;  
-    } else if (grade === '전설' || grade === '신화' || grade === '태초') {
-        multiplier = 3;  
-    }
+    // 크기에 따른 완만하고 합리적인 가격 보정 (최소 크기 85% ~ 최대 크기 145%)
+    let sizeRange = (maxSz - minSz) || 1;
+    let sizeRatio = Math.max(0, Math.min(1.5, (Number(size) - minSz) / sizeRange));
+    let sizeFactor = 0.85 + (sizeRatio * 0.4);
     
-    let rawPrice = Math.floor(baseUnit * Number(size) * multiplier);
+    let rawPrice = Math.floor(basePrice * sizeFactor);
     let coinLv = fishingData.silver_coin_level || 0;
     let coinPct = coinLv * 3;
     let coinBonus = Math.floor(rawPrice * (coinPct / 100));
@@ -343,10 +467,14 @@ async function initFishing() {
         let savedMoney = (data.money !== undefined && data.money >= 0) ? data.money : 1000;
         let savedRod = (data.rod_level !== undefined && data.rod_level >= 1) ? data.rod_level : 1;
         if (savedRod > 12) savedRod = 12;
+        let savedSpot = localStorage.getItem(`yubsa_spot_${currentUser}`) || '연못';
+        if (!FISHING_SPOTS[savedSpot]) savedSpot = '연못';
+        if (savedSpot === '절대자 김병수의 어항' && savedRod < 11) savedSpot = '연못';
 
         fishingData = {
             money: savedMoney,
             rod_level: savedRod,
+            current_spot: savedSpot,
             fish_records: data.fish_records || {},
             fish_inventory: data.fish_inventory || {},
             unlocked_beasts: data.unlocked_beasts || [],
@@ -383,7 +511,7 @@ async function initFishing() {
             compass_fragments: 0,
             compass_level: 0
         }]);
-        fishingData = { money: 1000, rod_level: 1, fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, makara_primordial_bonus: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null, silver_coins: 0, silver_coin_level: 0, compass_fragments: 0, compass_level: 0 };
+        fishingData = { money: 1000, rod_level: 1, current_spot: '연못', fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, makara_primordial_bonus: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null, silver_coins: 0, silver_coin_level: 0, compass_fragments: 0, compass_level: 0 };
     }
 
     await checkDagonMutualStatus();
@@ -395,6 +523,8 @@ async function initFishing() {
 async function saveFishingData() {
     if (!currentUser) return;
     
+    localStorage.setItem(`yubsa_spot_${currentUser}`, fishingData.current_spot || '연못');
+
     let cleanInventory = {};
     if (fishingData.fish_inventory) {
         for (let [k, v] of Object.entries(fishingData.fish_inventory)) {
@@ -428,6 +558,30 @@ async function saveFishingData() {
     if (error) {
         console.error("🚨 Supabase 낚시 데이터 저장 실패:", error.message);
     }
+}
+
+function selectFishingSpot(spotName) {
+    if (!FISHING_SPOTS[spotName]) return;
+    let spotConfig = FISHING_SPOTS[spotName];
+    if (spotConfig.minRodLevel && fishingData.rod_level < spotConfig.minRodLevel) {
+        alert(`🔒 [입장 불가] ${spotName}은(는) ${spotConfig.minRodLevel}단계 이상(차원 공허의 시공간 낚시대 이상)의 낚싯대를 보유해야만 입장할 수 있습니다!\n\n(현재 보유 낚싯대: ${fishingData.rod_level}단계)`);
+        return;
+    }
+    let currentScroll = window.scrollY;
+    fishingData.current_spot = spotName;
+    saveFishingData();
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
+    showFloatingAlert(`📍 [${spotConfig.icon} ${spotName}] 낚시터로 이동했습니다!`);
+}
+
+function setSpotFilter(spotKey) {
+    currentSpotFilter = spotKey;
+    let currentScroll = window.scrollY;
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
 }
 
 function startTradePolling() {
@@ -1262,7 +1416,7 @@ async function renderFishingView(contentArea) {
                 statusText = '🌍 [바하무트의 지탱] 낚시 비용 무료 상태!';
                 actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0369a1, #0284c7, #0f172a); color: #f0f9ff; font-weight: 800; border: 1px solid #38bdf8;">🌟 바하무트의 신성한 낚싯대 던지기 (비용: 0원)</button>`;
             } else {
-                statusText = '광활한 심해에서 대어를 노려보세요!';
+                statusText = '광활한 낚시터에서 대어를 노려보세요!';
                 actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0284c7, #0369a1);">🎣 낚싯대 던지기 (비용: ${currentRod.cost.toLocaleString()}원)</button>`;
             }
         } else if (fishingStep === 'waiting') {
@@ -1348,7 +1502,7 @@ async function renderFishingView(contentArea) {
     }
 
     // --- 📖 어류 도감 완성도 계산 및 렌더링 ---
-    let totalFishCount = FISH_DATABASE.length; // 122종
+    let totalFishCount = FISH_DATABASE.length; // 177종
     let discoveredNames = Object.keys(fishingData.fish_records || {}).filter(k => k !== '길냥이의 물고기' && k !== '붕');
     let totalDiscoveredCount = discoveredNames.length;
     let overallProgressPct = ((totalDiscoveredCount / totalFishCount) * 100).toFixed(1);
@@ -1386,20 +1540,33 @@ async function renderFishingView(contentArea) {
     }).join('');
 
     let filterChipsHtml = `
-        <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px;">
-            <button onclick="setRecordFilter('all')" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-weight: 700; cursor: pointer; background: ${currentRecordFilter === 'all' ? '#0284c7; color: white;' : '#f8fafc; color: #334155;'}">전체 보기</button>
+        <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px;">
+            <button onclick="setRecordFilter('all')" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-weight: 700; cursor: pointer; background: ${currentRecordFilter === 'all' ? '#0284c7; color: white;' : '#f8fafc; color: #334155;'}">전체 등급</button>
             <button onclick="setRecordFilter('unobtained')" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; font-weight: 700; cursor: pointer; background: ${currentRecordFilter === 'unobtained' ? '#e11d48; color: white;' : '#f8fafc; color: #334155;'}">미발견 어류만</button>
         </div>
     `;
 
-    // 어류 도감 필터링
-    let filteredFishList = [];
-    if (currentRecordFilter === 'all') {
-        filteredFishList = FISH_DATABASE;
-    } else if (currentRecordFilter === 'unobtained') {
-        filteredFishList = FISH_DATABASE.filter(f => !fishingData.fish_records || !fishingData.fish_records[f.name]);
-    } else {
-        filteredFishList = FISH_DATABASE.filter(f => f.grade === currentRecordFilter);
+    let spotFilterChipsHtml = `
+        <div style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px;">
+            <button onclick="setSpotFilter('all')" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.72rem; font-weight: 800; cursor: pointer; flex-shrink: 0; background: ${currentSpotFilter === 'all' ? '#0f172a; color: white;' : '#f8fafc; color: #334155;'}">🌐 전체 서식지</button>
+            ${Object.keys(FISHING_SPOTS).map(sK => {
+                let s = FISHING_SPOTS[sK];
+                let isS = currentSpotFilter === sK;
+                return `<button onclick="setSpotFilter('${sK}')" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.72rem; font-weight: 800; cursor: pointer; flex-shrink: 0; background: ${isS ? `${s.themeColor}; color: white;` : '#f8fafc; color: #334155;'}">${s.icon} ${s.name}</button>`;
+            }).join('')}
+        </div>
+    `;
+
+    // 어류 도감 필터링 (등급 + 서식지 교차 필터)
+    let filteredFishList = FISH_DATABASE;
+    if (currentRecordFilter === 'unobtained') {
+        filteredFishList = filteredFishList.filter(f => !fishingData.fish_records || !fishingData.fish_records[f.name]);
+    } else if (currentRecordFilter !== 'all') {
+        filteredFishList = filteredFishList.filter(f => f.grade === currentRecordFilter);
+    }
+
+    if (currentSpotFilter !== 'all') {
+        filteredFishList = filteredFishList.filter(f => f.spots && f.spots.includes(currentSpotFilter));
     }
 
     let recordsListHtml = "";
@@ -1410,6 +1577,10 @@ async function renderFishingView(contentArea) {
             let record = fishingData.fish_records ? fishingData.fish_records[fish.name] : null;
             let isDiscovered = !!record;
             let color = fish.color || '#64748b';
+            let spotBadges = (fish.spots || []).map(sp => {
+                let spInfo = FISHING_SPOTS[sp];
+                return spInfo ? `${spInfo.icon}${sp}` : sp;
+            }).join(', ');
 
             if (isDiscovered) {
                 let maxSz = record.maxSize;
@@ -1423,7 +1594,7 @@ async function renderFishingView(contentArea) {
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid var(--border-color); border-left: 5px solid ${color}; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.88rem; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                         <div>
                             <span style="font-weight: 800; color: #1e293b;">🐟 ${fish.name} <span style="color: ${color}; font-weight: 800; font-size: 0.75rem; margin-left: 4px; background: #f1f5f9; padding: 2px 5px; border-radius: 4px;">[${fish.grade}]</span></span>
-                            <div style="font-size: 0.75rem; color: #64748b; margin-top: 3px;">기본 범위: ${fish.minSize} ~ ${fish.maxSize}자 · 단가: ${fish.basePrice}G</div>
+                            <div style="font-size: 0.73rem; color: #64748b; margin-top: 3px;">서식지: <b>${spotBadges}</b> · 기본가: ${fish.basePrice.toLocaleString()}원</div>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 0.75rem; color: #475569;">최고 기록: ${sizeDetailStr}</div>
@@ -1436,7 +1607,7 @@ async function renderFishingView(contentArea) {
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-left: 5px solid #94a3b8; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.88rem; opacity: 0.75;">
                         <div>
                             <span style="font-weight: 700; color: #64748b;">❓ ??? (미지의 어류) <span style="color: ${color}; font-weight: 800; font-size: 0.75rem; margin-left: 4px; background: #f1f5f9; padding: 2px 5px; border-radius: 4px;">[${fish.grade}]</span></span>
-                            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 3px;">예상 크기: ${fish.minSize} ~ ${fish.maxSize}자</div>
+                            <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 3px;">서식지: ${spotBadges} · 예상 크기: ${fish.minSize} ~ ${fish.maxSize}자</div>
                         </div>
                         <div style="text-align: right;">
                             <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">🔒 미발견</span>
@@ -1519,6 +1690,39 @@ async function renderFishingView(contentArea) {
 
     let alertBoxDisplay = floatingAlertText ? 'block' : 'none';
 
+    // 현재 낚시터 정보 및 낚시터 선택 카드 목록
+    let currentSpotKey = fishingData.current_spot || '연못';
+    let currentSpot = FISHING_SPOTS[currentSpotKey] || FISHING_SPOTS['연못'];
+
+    let spotsCardsHtml = Object.keys(FISHING_SPOTS).map(sKey => {
+        let s = FISHING_SPOTS[sKey];
+        let isCurrent = (sKey === currentSpotKey);
+        let isLocked = s.minRodLevel && (fishingData.rod_level < s.minRodLevel);
+
+        let activeBorder = isCurrent 
+            ? `border: 2px solid #38bdf8; background: ${s.bgGradient}; color: white; transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.25);` 
+            : isLocked
+            ? `border: 1px dashed #eab308; background: #fffbeb; color: #78350f; opacity: 0.85;`
+            : `border: 1px solid #cbd5e1; background: #ffffff; color: #1e293b; opacity: 0.88;`;
+
+        let badgeStyle = isCurrent 
+            ? `background: rgba(255,255,255,0.25); color: #fff; font-weight: 800;` 
+            : isLocked
+            ? `background: #fef08a; color: #854d0e; font-weight: 800;`
+            : `background: #f1f5f9; color: #64748b; font-weight: 700;`;
+
+        let iconDisplay = isLocked ? `🔒 ${s.icon}` : s.icon;
+        let badgeDisplay = isCurrent ? '📍 현재 낚시터' : (isLocked ? '🔒 11단계 필요' : s.badge);
+
+        return `
+            <div onclick="selectFishingSpot('${sKey}')" style="flex: 0 0 auto; width: 140px; padding: 10px 8px; border-radius: 12px; cursor: pointer; text-align: center; transition: all 0.2s; ${activeBorder}">
+                <div style="font-size: 1.5rem; margin-bottom: 2px;">${iconDisplay}</div>
+                <div style="font-weight: 900; font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${s.name}</div>
+                <div style="font-size: 0.65rem; padding: 2px 4px; border-radius: 4px; margin-top: 4px; ${badgeStyle}">${badgeDisplay}</div>
+            </div>
+        `;
+    }).join('');
+
     contentArea.innerHTML = `
         <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 12px 24px; border-radius: 12px; font-size: 0.95rem; font-weight: 800; z-index: 9999; border: 2px solid #38bdf8; box-shadow: 0 6px 20px rgba(0,0,0,0.3); text-align: center; pointer-events: none; max-width: 90%;">${floatingAlertText}</div>
 
@@ -1534,6 +1738,17 @@ async function renderFishingView(contentArea) {
             ${tradeStatusBanner}
             ${dagonContractBanner}
             ${curseWarningBanner}
+
+            <!-- 🗺️ 7대 낚시터 이동 선택 바 -->
+            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.9rem; font-weight: 900; color: #1e293b;">🗺️ 낚시터 이동 (현재: ${currentSpot.icon} ${currentSpot.name})</span>
+                    <span style="font-size: 0.72rem; color: #64748b;">원하는 낚시터를 터치하여 이동</span>
+                </div>
+                <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">
+                    ${spotsCardsHtml}
+                </div>
+            </div>
 
             <div style="display: flex; justify-content: space-around; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; text-align: center;">
                 <div>
@@ -1558,8 +1773,14 @@ async function renderFishingView(contentArea) {
 
             ${makaraBoosterHtml}
 
-            <div style="position: relative; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div id="fishingStatusText" style="font-size: 1rem; font-weight: 700; color: ${statusColor}; margin-bottom: 14px; line-height: 1.4;">
+            <!-- 🎣 낚시터 테마별 메인 낚시 공간 -->
+            <div style="position: relative; background: ${currentSpot.bgGradient}; border: 2px solid ${currentSpot.themeColor}; border-radius: 14px; padding: 22px; text-align: center; margin-bottom: 16px; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.18);">
+                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.35); padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);">
+                    <span>${currentSpot.icon} ${currentSpot.name}</span>
+                    <span style="opacity: 0.7;">|</span>
+                    <span style="opacity: 0.95;">${currentSpot.desc}</span>
+                </div>
+                <div id="fishingStatusText" style="font-size: 1.05rem; font-weight: 800; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.6); margin-bottom: 14px; line-height: 1.4;">
                     ${statusText}
                 </div>
                 ${actionBtnHtml}
@@ -1592,15 +1813,18 @@ async function renderFishingView(contentArea) {
                 </div>
 
                 <!-- 등급별 발견 현황 칩 -->
-                <div style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px;">
+                <div style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px;">
                     ${gradeBadgesHtml}
                 </div>
 
-                <!-- 필터 버튼 -->
+                <!-- 등급 필터 버튼 -->
                 ${filterChipsHtml}
 
+                <!-- 서식지 필터 버튼 -->
+                ${spotFilterChipsHtml}
+
                 <!-- 도감 어류 목록 -->
-                <div style="display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; padding-right: 2px;">
+                <div style="display: flex; flex-direction: column; max-height: 250px; overflow-y: auto; padding-right: 2px;">
                     ${recordsListHtml}
                 </div>
             </div>
@@ -1804,47 +2028,66 @@ function executeCatchLogic() {
         return { name: '붕', size: birdSize, displaySize: '999.9자', displayPrice: '1,000,000원' };
     }
 
-    // 4. 등급 확률 계산
-    let rand = Math.random() * 100;
+    // 4. 현재 낚시터에 서식하는 어류 풀 추출 및 등급/어종 결정
+    let currentSpotName = fishingData.current_spot || '연못';
     let rodLevel = fishingData.rod_level;
-    let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
-    
-    let baseMythicChance = (rodLevel >= 10) ? (0.01 * Math.pow(5, Math.min(rodLevel, 12) - 6)) : 0; 
-    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
-    let makaraBonus = (hasMakara && rodLevel >= 10) ? (fishingData.makara_bonus_chance || 0) : 0;
-    let mythicChance = baseMythicChance + makaraBonus;
-
-    let basePrimordialChance = (rodLevel >= 11) ? 0.1 : 0;
-    let makaraPrimordialBonus = (hasMakara && rodLevel >= 11) ? (fishingData.makara_primordial_bonus || 0) : 0;
-    let primordialChance = basePrimordialChance + makaraPrimordialBonus;
-
-    let heroChance = 3 + (rodLevel * 1.8); 
-    let rareChance = 25 + (rodLevel * 0.5); 
-
     let selectedFish;
-    if (rodLevel >= 11 && rand < primordialChance) {
+
+    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
+
+    // 👑 [절대자 김병수의 어항]: 11단계 이상 낚싯대 전용이며, 오직 100% '태초' 등급 생물만 낚아 올립니다!
+    if (currentSpotName === '절대자 김병수의 어항') {
         let pool = FISH_DATABASE.filter(f => f.grade === '태초');
         selectedFish = selectFishFromPool(pool);
         if (hasMakara) fishingData.makara_primordial_bonus = 0;
-    } else if (rodLevel >= 10 && rand < primordialChance + mythicChance) {
-        let pool = FISH_DATABASE.filter(f => f.grade === '신화');
-        selectedFish = selectFishFromPool(pool);
-        if (hasMakara) fishingData.makara_bonus_chance = 0;
-    } else if (rand < primordialChance + mythicChance + legendaryChance) {
-        let pool = FISH_DATABASE.filter(f => f.grade === '전설');
-        selectedFish = selectFishFromPool(pool);
-    } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance) {
-        let pool = FISH_DATABASE.filter(f => f.grade === '영웅');
-        selectedFish = selectFishFromPool(pool);
-    } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance + rareChance) {
-        let pool = FISH_DATABASE.filter(f => f.grade === '희귀');
-        selectedFish = selectFishFromPool(pool);
     } else {
-        let pool = FISH_DATABASE.filter(f => f.grade === '일반');
-        selectedFish = selectFishFromPool(pool);
+        // 일반 6대 낚시터 (연못, 계곡, 저수지, 갯벌, 바다, 깊은바다)
+        let availableInSpot = FISH_DATABASE.filter(f => f.spots && f.spots.includes(currentSpotName));
+        if (availableInSpot.length === 0) availableInSpot = FISH_DATABASE;
+
+        let rand = Math.random() * 100;
+        let legendaryChance = 0.025 + (rodLevel - 1) * 1.108; 
+        
+        let baseMythicChance = (rodLevel >= 10) ? (0.01 * Math.pow(5, Math.min(rodLevel, 12) - 6)) : 0; 
+        let makaraBonus = (hasMakara && rodLevel >= 10) ? (fishingData.makara_bonus_chance || 0) : 0;
+        let mythicChance = baseMythicChance + makaraBonus;
+
+        let basePrimordialChance = (rodLevel >= 11) ? 0.1 : 0;
+        let makaraPrimordialBonus = (hasMakara && rodLevel >= 11) ? (fishingData.makara_primordial_bonus || 0) : 0;
+        let primordialChance = basePrimordialChance + makaraPrimordialBonus;
+
+        let heroChance = 3 + (rodLevel * 1.8); 
+        let rareChance = 25 + (rodLevel * 0.5); 
+
+        if (rodLevel >= 11 && rand < primordialChance) {
+            let pool = FISH_DATABASE.filter(f => f.grade === '태초');
+            selectedFish = selectFishFromPool(pool);
+            if (hasMakara) fishingData.makara_primordial_bonus = 0;
+        } else if (rodLevel >= 10 && rand < primordialChance + mythicChance) {
+            let pool = availableInSpot.filter(f => f.grade === '신화');
+            if (pool.length === 0) pool = FISH_DATABASE.filter(f => f.grade === '신화');
+            selectedFish = selectFishFromPool(pool);
+            if (hasMakara) fishingData.makara_bonus_chance = 0;
+        } else if (rand < primordialChance + mythicChance + legendaryChance) {
+            let pool = availableInSpot.filter(f => f.grade === '전설');
+            if (pool.length === 0) pool = FISH_DATABASE.filter(f => f.grade === '전설');
+            selectedFish = selectFishFromPool(pool);
+        } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance) {
+            let pool = availableInSpot.filter(f => f.grade === '영웅');
+            if (pool.length === 0) pool = FISH_DATABASE.filter(f => f.grade === '영웅');
+            selectedFish = selectFishFromPool(pool);
+        } else if (rand < primordialChance + mythicChance + legendaryChance + heroChance + rareChance) {
+            let pool = availableInSpot.filter(f => f.grade === '희귀');
+            if (pool.length === 0) pool = FISH_DATABASE.filter(f => f.grade === '희귀');
+            selectedFish = selectFishFromPool(pool);
+        } else {
+            let pool = availableInSpot.filter(f => f.grade === '일반');
+            if (pool.length === 0) pool = FISH_DATABASE.filter(f => f.grade === '일반');
+            selectedFish = selectFishFromPool(pool);
+        }
     }
 
-    // 5. 물고기 크기 계산 및 익티오켄타우로스 10% 증가 보너스 적용
+    // 6. 물고기 크기 계산 및 익티오켄타우로스 10% 증가 보너스 적용
     let sizeBonus = (rodLevel - 1) * 0.3;
     let baseFishSizeRaw = Math.random() * (selectedFish.maxSize - selectedFish.minSize) + selectedFish.minSize + sizeBonus;
     let baseSize = parseFloat(baseFishSizeRaw.toFixed(1));
@@ -1880,7 +2123,7 @@ function executeCatchLogic() {
 
     saveFishingData();
 
-    // 6. 다곤 상호 계약 동기화
+    // 7. 다곤 상호 계약 동기화
     let hasMyDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
     if (hasMyDagon && fishingData.dagon_partner && fishingData.is_dagon_mutual) {
         let partnerName = fishingData.dagon_partner;
@@ -1925,8 +2168,8 @@ function executeCatchLogic() {
     return { 
         name: fishName, 
         size: totalSize, 
-        baseSize: baseSize,
-        ichthioBonus: ichthioBonus,
+        baseSize: baseSize, 
+        ichthioBonus: ichthioBonus, 
         displaySize: displaySize, 
         displayPrice: displayPrice,
         priceDetails: priceDetails
@@ -2075,3 +2318,5 @@ window.openTradeRoom = openTradeRoom;
 window.executeFinalRoomTrade = executeFinalRoomTrade;
 window.toggleBahamutAuto = toggleBahamutAuto;
 window.setRecordFilter = setRecordFilter;
+window.setSpotFilter = setSpotFilter;
+window.selectFishingSpot = selectFishingSpot;
