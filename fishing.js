@@ -1879,23 +1879,24 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
             </div>
 
             <!-- 1인칭 HIT 알림 배너 -->
-            <div style="position: absolute; top: 26px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; padding: 7px 18px; border-radius: 20px; font-size: 0.95rem; font-weight: 900; border: 2px solid #fecaca; box-shadow: 0 0 25px rgba(239,68,68,0.9); z-index: 30; animation: fpRodStrainShake 0.15s infinite; white-space: nowrap;">
+            <div style="position: absolute; top: 26px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; padding: 7px 18px; border-radius: 20px; font-size: 0.95rem; font-weight: 900; border: 2px solid #fecaca; box-shadow: 0 0 25px rgba(239,68,68,0.9); z-index: 30; animation: fpHitBannerShake 0.15s infinite; white-space: nowrap;">
                 🚨 HIT!! 지금 바로 낚아채세요!! 🚨
             </div>
         `;
     }
 
     return `
-        <!-- 1인칭 시점 낚시 애니메이션 전용 스타일 -->
+        <!-- 1인칭 시점 낚시 애니메이션 전용 스타일 (iOS/Android 완벽 중앙 정렬 지원) -->
         <style>
             @keyframes fpBreatheIdle { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-2px, -4px) rotate(-0.5deg); } }
-            @keyframes fpBobberFloat { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-7px) rotate(6deg); } }
-            @keyframes fpRipple3D { 0% { transform: scale(0.2, 0.1); opacity: 0.9; } 100% { transform: scale(2.8, 1.4); opacity: 0; } }
+            @keyframes fpBobberFloat { 0%, 100% { transform: translate(-50%, 0px) rotate(0deg); } 50% { transform: translate(-50%, -7px) rotate(6deg); } }
+            @keyframes fpRipple3D { 0% { transform: translate(-50%, 0) scale(0.2, 0.1); opacity: 0.9; } 100% { transform: translate(-50%, 0) scale(2.8, 1.4); opacity: 0; } }
             @keyframes fpShadowFishSwim { 0% { transform: translate(60px, 20px) scale(0.5); opacity: 0; } 40% { transform: translate(15px, -5px) scale(0.85); opacity: 0.75; } 70% { transform: translate(-5px, 3px) scale(1); opacity: 0.95; } 100% { transform: translate(-50px, 20px) scale(0.65); opacity: 0.2; } }
             @keyframes fpRodStrainShake { 0%, 100% { transform: translate(0, 8px) rotate(4deg); } 25% { transform: translate(-3px, 12px) rotate(5.5deg); } 50% { transform: translate(3px, 7px) rotate(3.5deg); } 75% { transform: translate(-2px, 11px) rotate(5deg); } }
-            @keyframes fpBiteDunk { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(22px) scale(0.8); } }
+            @keyframes fpHitBannerShake { 0%, 100% { transform: translate(-50%, 0) rotate(0deg); } 25% { transform: translate(calc(-50% - 3px), 2px) rotate(1deg); } 50% { transform: translate(calc(-50% + 3px), -2px) rotate(-1deg); } 75% { transform: translate(calc(-50% - 2px), 1px) rotate(0.5deg); } }
+            @keyframes fpBiteDunk { 0% { transform: translate(-50%, 0) scale(1); } 100% { transform: translate(-50%, 22px) scale(0.8); } }
             @keyframes fpSplashTowardsCamera { 0% { transform: scale(0.2) translateY(0); opacity: 1; } 50% { transform: scale(1.6) translateY(-15px); opacity: 0.95; } 100% { transform: scale(2.6) translateY(-30px); opacity: 0; } }
-            @keyframes fpFishLeapToCamera { 0% { transform: translateY(80px) scale(0.1) rotate(-20deg); opacity: 0; } 50% { transform: translateY(-30px) scale(1.35) rotate(10deg); opacity: 1; } 75% { transform: translateY(-15px) scale(1.1) rotate(-5deg); opacity: 1; } 100% { transform: translateY(0px) scale(1) rotate(0deg); opacity: 1; } }
+            @keyframes fpFishLeapToCamera { 0% { transform: translate(-50%, 80px) scale(0.1) rotate(-15deg); opacity: 0; } 50% { transform: translate(-50%, -20px) scale(1.15) rotate(5deg); opacity: 1; } 75% { transform: translate(-50%, -8px) scale(1.05) rotate(-2deg); opacity: 1; } 100% { transform: translate(-50%, 0px) scale(1) rotate(0deg); opacity: 1; } }
             @keyframes fpWaterPerspWave { 0% { transform: translateY(0); } 50% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
             @keyframes cosmicAuraGlow { 0%, 100% { filter: drop-shadow(0 0 8px #f59e0b) drop-shadow(0 0 18px #ec4899); } 50% { filter: drop-shadow(0 0 16px #3b82f6) drop-shadow(0 0 24px #a855f7); } }
             @keyframes timerBarShrink { 0% { width: 100%; background: #22c55e; } 50% { width: 50%; background: #eab308; } 100% { width: 0%; background: #ef4444; } }
