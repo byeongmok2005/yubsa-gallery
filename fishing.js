@@ -1972,72 +1972,6 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
     `;
 }
 
-async function renderFishingView(contentArea) {
-    let currentRod = ROD_TIERS[fishingData.rod_level];
-    let nextRod = ROD_TIERS[fishingData.rod_level + 1];
-
-    let actionBtnHtml = "";
-    let statusText = "";
-    let statusColor = "#0369a1";
-
-    let tradeStatusBanner = "";
-    if (fishingData.trade_request && fishingData.trade_request.status) {
-        let req = fishingData.trade_request;
-        let target = req.target;
-        if (req.status === 'picking') {
-            tradeStatusBanner = `
-                <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                    ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
-                </div>
-            `;
-        } else if (req.status === 'waiting') {
-            tradeStatusBanner = `
-                <div style="background: #eff6ff; border: 2px solid #3b82f6; color: #1d4ed8; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center; display: flex; justify-content: space-between; align-items: center;">
-                    <span>⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
-                    <button onclick="cancelMyTradeRequest()" style="background: #dc2626; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">취소</button>
-                </div>
-            `;
-        }
-    }
-
-    let curseWarningBanner = "";
-    let hasMatsuya = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마츠야');
-    let isCursedOnMe = (fishingData.cursed_target === currentUser && fishingData.curse_remaining_count > 0);
-
-    if (isCursedOnMe) {
-        if (hasMatsuya) {
-            curseWarningBanner = `
-                <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                    🛡️ [마츠야의 구원 활성] 마츠야가 저주로 인한 모든 피해를 완벽히 차단 중입니다!
-                </div>
-            `;
-        } else {
-            curseWarningBanner = `
-                <div style="background: #fef2f2; border: 2px solid #ef4444; color: #991b1b; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                    ⚠️ 인면어의 저주를 받아 재앙이 예고되고 있습니다. (남은 저주 횟수: ${fishingData.curse_remaining_count}회)
-                </div>
-            `;
-        }
-    }
-
-    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
-    let dagonContractBanner = "";
-    if (hasDagon && fishingData.dagon_partner) {
-        if (fishingData.is_dagon_mutual) {
-            dagonContractBanner = `
-                <div style="background: #f8fafc; border: 1px solid #78716c; color: #292524; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                    📜 [ ${fishingData.dagon_partner} ] 님과 상호 다곤 계약이 유효합니다. (실시간 물고기 공유 중)
-                </div>
-            `;
-        } else {
-            dagonContractBanner = `
-                <div style="background: #fffbeb; border: 1px solid #d97706; color: #92400e; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
-                    ⏳ [ ${fishingData.dagon_partner} ] 님에게 계약을 신청함 (상대방도 나를 지목해야 연결됩니다)
-                </div>
-            `;
-        }
-    }
-
 // 🎣 실시간 낚시 상태 텍스트 및 액션 버튼 반환 함수
 function getStageStatusAndButton() {
     let currentRod = ROD_TIERS[fishingData.rod_level] || ROD_TIERS[1];
@@ -2177,6 +2111,120 @@ function updateFishingStageOnly() {
     let invEl = document.getElementById('fishingInventoryArea');
     if (invEl) invEl.innerHTML = renderInventoryHtml();
 }
+
+function openCurseManager() {
+    let hasJinmyeon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('인면어');
+    if (!hasJinmyeon) {
+        alert("인면어 영물을 보유하고 있어야 저주 대상을 관리할 수 있습니다!");
+        return;
+    }
+    closeAllModals();
+    if (!playerList || playerList.length === 0) {
+        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용'];
+    }
+    let currentTarget = fishingData.cursed_target || currentUser;
+    let playerOptionsHtml = playerList.map(p => `<option value="${p}" ${p === currentTarget ? 'selected' : ''}>${p}</option>`).join('');
+    
+    let modalHtml = `
+        <div id="curseModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2500;">
+            <div style="background: white; width: 95%; max-width: 400px; padding: 22px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: left; border-top: 6px solid #be185d;">
+                <h3 style="margin-top: 0; color: #be185d; font-size: 1.15rem; font-weight: 900; display: flex; justify-content: space-between; align-items: center;">
+                    <span>😈 인면어 저주 대상 관리</span>
+                    <button onclick="document.getElementById('curseModal').remove();" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #64748b;">✕</button>
+                </h3>
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 0.8rem; font-weight: 700; color: #334155;">저주를 내릴 대상 플레이어 선택:</label>
+                    <select id="curseTargetSelect" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 4px; font-weight: 700;">
+                        ${playerOptionsHtml}
+                    </select>
+                </div>
+                <button onclick="applyCurseTarget()" style="width: 100%; background: #be185d; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-bottom: 8px;">저주 대상 지정하기</button>
+                <button onclick="document.getElementById('curseModal').remove();" style="width: 100%; background: #64748b; color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer;">닫기</button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+async function applyCurseTarget() {
+    let sel = document.getElementById('curseTargetSelect');
+    if (!sel) return;
+    let target = sel.value;
+    fishingData.cursed_target = target;
+    fishingData.curse_remaining_count = 3;
+    await saveFishingData();
+    closeAllModals();
+    showFloatingAlert(`😈 [${target}]님에게 인면어의 저주(3회)를 걸었습니다!`);
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+}
+
+async function renderFishingView(contentArea) {
+    if (!contentArea) contentArea = document.getElementById("contentArea");
+    if (!contentArea) return;
+
+    let currentRod = ROD_TIERS[fishingData.rod_level] || ROD_TIERS[1];
+    let nextRod = ROD_TIERS[fishingData.rod_level + 1];
+
+    let { statusText, actionBtnHtml } = getStageStatusAndButton();
+
+    let tradeStatusBanner = "";
+    if (fishingData.trade_request && fishingData.trade_request.status) {
+        let req = fishingData.trade_request;
+        let target = req.target;
+        if (req.status === 'picking') {
+            tradeStatusBanner = `
+                <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    ✨ [직거래 진행중] 상대방(${target})이 직거래 물품을 고르는 중입니다...
+                </div>
+            `;
+        } else if (req.status === 'waiting') {
+            tradeStatusBanner = `
+                <div style="background: #eff6ff; border: 2px solid #3b82f6; color: #1d4ed8; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center; display: flex; justify-content: space-between; align-items: center;">
+                    <span>⏳ [${target}]님의 직거래 수락을 기다리는 중...</span>
+                    <button onclick="cancelMyTradeRequest()" style="background: #dc2626; color: white; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer;">취소</button>
+                </div>
+            `;
+        }
+    }
+
+    let curseWarningBanner = "";
+    let hasMatsuya = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마츠야');
+    let isCursedOnMe = (fishingData.cursed_target === currentUser && fishingData.curse_remaining_count > 0);
+
+    if (isCursedOnMe) {
+        if (hasMatsuya) {
+            curseWarningBanner = `
+                <div style="background: #fefce8; border: 2px solid #eab308; color: #854d0e; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    🛡️ [마츠야의 구원 활성] 마츠야가 저주로 인한 모든 피해를 완벽히 차단 중입니다!
+                </div>
+            `;
+        } else {
+            curseWarningBanner = `
+                <div style="background: #fef2f2; border: 2px solid #ef4444; color: #991b1b; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    ⚠️ 인면어의 저주를 받아 재앙이 예고되고 있습니다. (남은 저주 횟수: ${fishingData.curse_remaining_count}회)
+                </div>
+            `;
+        }
+    }
+
+    let hasDagon = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('다곤');
+    let dagonContractBanner = "";
+    if (hasDagon && fishingData.dagon_partner) {
+        if (fishingData.is_dagon_mutual) {
+            dagonContractBanner = `
+                <div style="background: #f8fafc; border: 1px solid #78716c; color: #292524; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    📜 [ ${fishingData.dagon_partner} ] 님과 상호 다곤 계약이 유효합니다. (실시간 물고기 공유 중)
+                </div>
+            `;
+        } else {
+            dagonContractBanner = `
+                <div style="background: #fffbeb; border: 1px solid #d97706; color: #92400e; padding: 8px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 700; text-align: center;">
+                    ⏳ [ ${fishingData.dagon_partner} ] 님에게 계약을 신청함 (상대방도 나를 지목해야 연결됩니다)
+                </div>
+            `;
+        }
+    }
 
     // --- 📖 어류 도감 완성도 계산 및 렌더링 ---
     let totalFishCount = FISH_DATABASE.length; // 177종
@@ -2350,6 +2398,7 @@ function updateFishingStageOnly() {
         }
     });
 
+    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
     let makaraBoosterHtml = "";
     if (hasMakara) {
         let makaraCurrentBonus = (fishingData.makara_bonus_chance || 0).toFixed(2);
@@ -2399,6 +2448,8 @@ function updateFishingStageOnly() {
             </div>
         `;
     }).join('');
+
+    let inventoryHtml = renderInventoryHtml();
 
     contentArea.innerHTML = `
         <div id="floatingAlertBox" style="display: ${alertBoxDisplay}; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); color: white; padding: 12px 24px; border-radius: 12px; font-size: 0.95rem; font-weight: 800; z-index: 9999; border: 2px solid #38bdf8; box-shadow: 0 6px 20px rgba(0,0,0,0.3); text-align: center; pointer-events: none; max-width: 90%;">${floatingAlertText}</div>

@@ -222,7 +222,17 @@ function navigateTo(view) {
         isCreatingTravelRoom = false;
         fetchTravelRooms();
     } else if (view === 'fishing') {
-        initFishing().then(() => renderFishingView(document.getElementById("contentArea")));
+        currentView = 'fishing';
+        initFishing().then(() => {
+            if (currentView === 'fishing') {
+                renderFishingView(document.getElementById("contentArea"));
+            }
+        }).catch(err => {
+            console.error("낚시터 로딩 오류:", err);
+            if (currentView === 'fishing') {
+                renderFishingView(document.getElementById("contentArea"));
+            }
+        });
         return;
     }
     renderMainContent();
@@ -536,6 +546,9 @@ function renderMainContent() {
         return;
     } else if (currentView === 'inquiry') {
         renderInquiryView(contentArea);
+        return;
+    } else if (currentView === 'fishing') {
+        renderFishingView(contentArea);
         return;
     }
 
