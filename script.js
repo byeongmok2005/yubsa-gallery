@@ -29,21 +29,44 @@ let activeTravelRoomTitle = "";
 let travelPhotos = [];
 let isCreatingTravelRoom = false;
 
+// 🔒 보안 및 관리자 2차 인증 상태 변수
+let isAdminSessionVerified = false;
+
+async function hashStringSHA256(str) {
+    const utf8 = new TextEncoder().encode(str + "_yubsa_admin_security_salt_2026");
+    const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function getVerifiedSessionUser() {
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session || !session.user) return null;
+        const userMeta = session.user.user_metadata;
+        let nick = userMeta && userMeta.nickname ? userMeta.nickname : session.user.email.split('@')[0];
+        return cleanName(nick);
+    } catch (e) {
+        return null;
+    }
+}
+
 async function initApp() {
     const { data: { session } } = await supabaseClient.auth.getSession();
     
     if (session && session.user) {
         const userMeta = session.user.user_metadata;
-        currentUser = userMeta && userMeta.nickname ? userMeta.nickname : session.user.email.split('@')[0];
+        currentUser = cleanName(userMeta && userMeta.nickname ? userMeta.nickname : session.user.email.split('@')[0]);
         localStorage.setItem('yubsa_user', currentUser);
     } else {
-        currentUser = localStorage.getItem('yubsa_user') || "";
+        currentUser = "";
+        localStorage.removeItem('yubsa_user');
     }
 
     await fetchMembers();
     await fetchUserProfiles();
     renderAuthArea();
-    renderSidebarMenu();
+    await renderSidebarMenu();
     if (!currentUser) {
         renderAuthScreen();
     } else {
@@ -54,12 +77,13 @@ async function initApp() {
     }
 }
 
-function renderSidebarMenu() {
+async function renderSidebarMenu() {
     const menuList = document.getElementById("sidebarMenuList");
     if (!menuList) return;
 
+    let realUser = await getVerifiedSessionUser();
     let adminMenuHtml = "";
-    if (currentUser === '박병목') {
+    if (realUser === '박병목') {
         adminMenuHtml = `<li class="sidebar-menu-item" onclick="navigateTo('admin')">👑 관리자 페이지</li>`;
     }
 
@@ -774,8 +798,25 @@ async function deleteTravelPhoto(photoId, imageUrl) {
 // ========================================================
 
 async function renderAdminView(contentArea) {
-    if (currentUser !== '박병목') {
-        contentArea.innerHTML = `<div class="card"><p style="text-align:center; color:var(--danger); font-weight:700;">접근 권한이 없습니다.</p></div>`;
+    const realUser = await getVerifiedSessionUser();
+    if (realUser !== '박병목') {
+        contentArea.innerHTML = `
+            <div class="card" style="text-align: center; padding: 40px 20px;">
+                <div style="font-size: 3rem; margin-bottom: 12px;">🚫</div>
+                <h2 style="color: var(--danger); font-size: 1.3rem; font-weight: 800; margin-bottom: 8px;">접근 불가 (보안 경고)</h2>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5;">
+                    관리자(박병목) 계정으로 실제 로그인된 세션이 아닙니다.<br>
+                    F12 콘솔 변수 조작 및 비인가 접근이 완벽히 차단되었습니다.
+                </p>
+                <button class="btn-primary" onclick="navigateTo('home')">홈으로 돌아가기</button>
+            </div>
+        `;
+        return;
+    }
+
+    let masterHash = localStorage.getItem('yubsa_admin_master_hash');
+    if (!isAdminSessionVerified) {
+        openAdminPinModal(masterHash);
         return;
     }
 
@@ -957,6 +998,88 @@ async function adminDeleteComment(commentId) {
     renderAdminView(document.getElementById("contentArea"));
 }
 
+function openAdminPinModal(masterHash) {
+    const existing = document.getElementById("adminPinModal");
+    if (existing) existing.remove();
+
+    let isInitialSetup = !masterHash;
+    let titleText = isInitialSetup ? "👑 [최초 설정] 관리자 마스터 PIN 등록" : "👑 [2차 보안] 관리자 마스터 PIN 인증";
+    let descText = isInitialSetup 
+        ? "관리자 페이지를 철통 보호하기 위해 사용할 마스터 비밀번호(PIN)를 등록해주세요.<br><span style='color:#0284c7; font-size:0.8rem;'>※ 단방향 암호화(SHA-256)로 저장되어 F12로도 절대 열람할 수 없습니다.</span>" 
+        : "관리자 페이지에 접근하려면 마스터 비밀번호(PIN)를 입력하세요.";
+
+    let modalHtml = `
+        <div id="adminPinModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 99999;">
+            <div style="background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border-top: 6px solid #eab308; text-align: left;">
+                <h3 style="margin-top: 0; color: #1e293b; font-size: 1.15rem; font-weight: 800;">${titleText}</h3>
+                <p style="font-size: 0.85rem; color: #64748b; line-height: 1.5; margin: 10px 0 16px 0;">${descText}</p>
+                
+                <div style="margin-bottom: 16px;">
+                    <label style="font-size: 0.8rem; font-weight: 700; color: #334155; display: block; margin-bottom: 6px;">마스터 비밀번호 (PIN)</label>
+                    <input type="password" id="adminSecurityPinInput" placeholder="비밀번호 입력..." style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; box-sizing: border-box;">
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="submitAdminPin(${isInitialSetup})" style="flex: 2; background: linear-gradient(135deg, #eab308, #ca8a04); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 800; font-size: 0.95rem; cursor: pointer;">${isInitialSetup ? 'PIN 등록 및 입장' : '인증 및 입장'}</button>
+                    <button onclick="closeAdminPinModal()" style="flex: 1; background: #94a3b8; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">취소</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    setTimeout(() => {
+        let input = document.getElementById("adminSecurityPinInput");
+        if (input) {
+            input.focus();
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitAdminPin(isInitialSetup);
+            });
+        }
+    }, 100);
+}
+
+async function submitAdminPin(isInitialSetup) {
+    let input = document.getElementById("adminSecurityPinInput");
+    if (!input) return;
+    let val = input.value.trim();
+    if (!val) {
+        alert("비밀번호를 입력해주세요!");
+        return;
+    }
+
+    let inputHash = await hashStringSHA256(val);
+
+    if (isInitialSetup) {
+        localStorage.setItem('yubsa_admin_master_hash', inputHash);
+        isAdminSessionVerified = true;
+        closeAdminPinModal();
+        alert("👑 관리자 마스터 PIN이 성공적으로 등록되었습니다!");
+        const contentArea = document.getElementById("contentArea");
+        if (contentArea) renderAdminView(contentArea);
+    } else {
+        let masterHash = localStorage.getItem('yubsa_admin_master_hash');
+        if (inputHash === masterHash) {
+            isAdminSessionVerified = true;
+            closeAdminPinModal();
+            const contentArea = document.getElementById("contentArea");
+            if (contentArea) renderAdminView(contentArea);
+        } else {
+            alert("❌ 관리자 마스터 비밀번호가 일치하지 않습니다.");
+            input.value = "";
+            input.focus();
+        }
+    }
+}
+
+function closeAdminPinModal() {
+    let modal = document.getElementById("adminPinModal");
+    if (modal) modal.remove();
+    if (!isAdminSessionVerified && currentView === 'admin') {
+        navigateTo('home');
+    }
+}
+
 function toggleReportDetail(memberName) {
     const el = document.getElementById(`reportDetail_${memberName}`);
     if (el) {
@@ -980,21 +1103,43 @@ async function adminEditLikes(targetUser) {
 
     let userPhotos = photos.filter(p => p.uploader && p.uploader.toLowerCase() === targetUser.toLowerCase());
     if (userPhotos.length === 0) {
-        alert("해당 유저가 올린 사진이 없어 좋아요를 수정할 수 없습니다.");
-        return;
+        let avatarImg = userProfiles[targetUser] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+        const { error: insertError } = await supabaseClient.from('photos').insert([{
+            title: `[프로필] ${targetUser}`,
+            url: avatarImg,
+            target: [targetUser],
+            uploader: targetUser,
+            likes: newTargetLikes,
+            liked_users: []
+        }]);
+
+        if (insertError) {
+            alert("좋아요 수정 실패: " + insertError.message);
+            return;
+        }
+    } else {
+        const updatePromises = [
+            supabaseClient.from('photos').update({ likes: newTargetLikes }).eq('id', userPhotos[0].id)
+        ];
+        for (let i = 1; i < userPhotos.length; i++) {
+            if ((userPhotos[i].likes || 0) > 0) {
+                updatePromises.push(supabaseClient.from('photos').update({ likes: 0 }).eq('id', userPhotos[i].id));
+            }
+        }
+        const results = await Promise.all(updatePromises);
+        const hasError = results.some(r => r.error);
+        if (hasError) {
+            alert("수정 중 오류가 발생했습니다.");
+            return;
+        }
     }
 
-    let targetPhoto = userPhotos[0];
-    let diff = newTargetLikes - currentTotal;
-    let adjustedLikes = Math.max(0, (targetPhoto.likes || 0) + diff);
-
-    const { error } = await supabaseClient.from('photos').update({ likes: adjustedLikes }).eq('id', targetPhoto.id);
-    if (error) {
-        alert("수정 실패: " + error.message);
-        return;
+    alert(`[${targetUser}]님의 총 좋아요 수가 ${newTargetLikes}개로 성공적으로 수정되었습니다!`);
+    await fetchPhotos();
+    const contentArea = document.getElementById("contentArea");
+    if (contentArea) {
+        await renderAdminView(contentArea);
     }
-    alert(`[${targetUser}]님의 좋아요가 성공적으로 수정되었습니다!`);
-    fetchPhotos();
 }
 
 function renderMyProfileView(contentArea) {
@@ -1796,6 +1941,13 @@ async function uploadPhoto() {
         return;
     }
 
+    const realUser = await getVerifiedSessionUser();
+    if (!realUser) {
+        alert("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+        return;
+    }
+    currentUser = realUser;
+
     const { error: storageError } = await supabaseClient.storage.from('yubsa-bucket').upload(fileName, file);
     if (storageError) { 
         alert("업로드 실패: " + storageError.message); 
@@ -1806,7 +1958,7 @@ async function uploadPhoto() {
     const imageUrl = publicUrlData.publicUrl;
 
     const { error: dbError } = await supabaseClient.from('photos').insert([
-        { title: photoTitle, url: imageUrl, target: selectedTargets, uploader: currentUser, likes: 0, liked_users: [] }
+        { title: photoTitle, url: imageUrl, target: selectedTargets, uploader: realUser, likes: 0, liked_users: [] }
     ]);
 
     if (dbError) { alert("저장 실패: " + dbError.message); return; }
