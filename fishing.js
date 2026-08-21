@@ -29,9 +29,11 @@ let biteTimer = null;
 let floatingAlertText = ""; 
 let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
 let bahamutAutoActive = true; 
+let hippocampusAutoActive = true; 
 let recentCaughtFishHistory = []; // 같은 물고기 연속 중복 방지 버퍼
 let currentRecordFilter = 'all'; // 어류 도감 등급 필터 상태 ('all', '일반', '희귀', '영웅', '전설', '신화', '태초', 'unobtained')
 let currentSpotFilter = 'all';   // 어류 도감 서식지 필터 상태 ('all', '연못', '계곡', '저수지', '갯벌', '바다', '깊은바다', '절대자 김병수의 어항')
+let lastCaughtResult = null;     // 방금 낚아올린 어류 (생동감 넘치는 낚시 연출용)
 
 const MAX_COMPASS_LEVEL = 24; // 나침반 최대 레벨 24 (은화는 무한 상승)
 
@@ -457,6 +459,9 @@ async function initFishing() {
     let savedBahamut = localStorage.getItem(`bahamut_auto_${currentUser}`);
     bahamutAutoActive = savedBahamut !== null ? JSON.parse(savedBahamut) : true;
 
+    let savedHippocampus = localStorage.getItem(`hippocampus_auto_${currentUser}`);
+    hippocampusAutoActive = savedHippocampus !== null ? JSON.parse(savedHippocampus) : true;
+
     const { data } = await supabaseClient
         .from('user_fishing_data')
         .select('*')
@@ -471,11 +476,24 @@ async function initFishing() {
         if (!FISHING_SPOTS[savedSpot]) savedSpot = '연못';
         if (savedSpot === '절대자 김병수의 어항' && savedRod < 11) savedSpot = '연못';
 
+        // 🛠️ 구버전 잔여 고스트 어종 기록 자동 정리 (현재 177종 도감 + 특수 어종만 보존)
+        let validFishNames = new Set(FISH_DATABASE.map(f => f.name));
+        validFishNames.add('붕');
+        validFishNames.add('길냥이의 물고기');
+        let cleanedRecords = {};
+        if (data.fish_records && typeof data.fish_records === 'object') {
+            for (let [k, v] of Object.entries(data.fish_records)) {
+                if (validFishNames.has(k)) {
+                    cleanedRecords[k] = v;
+                }
+            }
+        }
+
         fishingData = {
             money: savedMoney,
             rod_level: savedRod,
             current_spot: savedSpot,
-            fish_records: data.fish_records || {},
+            fish_records: cleanedRecords,
             fish_inventory: data.fish_inventory || {},
             unlocked_beasts: data.unlocked_beasts || [],
             cursed_target: data.cursed_target !== undefined ? data.cursed_target : currentUser,
@@ -744,6 +762,23 @@ async function toggleBahamutAuto() {
     window.scrollTo(0, currentScroll);
 }
 
+async function toggleHippocampusAuto() {
+    let currentScroll = window.scrollY;
+    hippocampusAutoActive = !hippocampusAutoActive;
+    
+    localStorage.setItem(`hippocampus_auto_${currentUser}`, JSON.stringify(hippocampusAutoActive));
+
+    let statusMsg = hippocampusAutoActive ? "활성화 (자동 낚아채기)" : "비활성화 (수동 손맛 챔질)";
+    showFloatingAlert(`⚡ 히포캠포스 자동 낚시: ${statusMsg}`);
+    
+    closeAllModals();
+    showBeastDetail('히포캠포스');
+
+    let contentArea = document.getElementById("contentArea");
+    if (contentArea) renderFishingView(contentArea);
+    window.scrollTo(0, currentScroll);
+}
+
 function closeAllModals() {
     let modals = document.querySelectorAll('#beastModal, #dmTradeModal, #inboxModal, #tradeRoomModal, #dagonContractModal, #curseModal, #sirenChoiceModal, #tradeResultModal, #pirateUpgradeModal');
     modals.forEach(m => m.remove());
@@ -815,6 +850,16 @@ function showBeastDetail(beastName) {
                 <div style="margin-top: 12px; background: #fff7ed; border: 1px solid #b45309; padding: 10px; border-radius: 8px; text-align: center;">
                     <div style="font-size: 0.85rem; color: #9a3412; font-weight: 700; margin-bottom: 6px;">상태: ${bahamutAutoActive ? '자동 사냥 작동 중 (30초)' : '정지됨'}</div>
                     <button onclick="toggleBahamutAuto()" style="width: 100%; background: ${btnBg}; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer;">${btnText}</button>
+                </div>
+            `;
+        } else if (beastName === '히포캠포스') {
+            let btnBg = hippocampusAutoActive ? '#dc2626' : '#16a34a';
+            let btnText = hippocampusAutoActive ? '⏹️ 히포캠포스 자동 낚시 끄기' : '▶️ 히포캠포스 자동 낚시 켜기';
+            let statusDesc = hippocampusAutoActive ? '작동 중 🟢 (자동 낚아챔)' : '정지됨 🔴 (수동 손맛 챔질)';
+            extraAction = `
+                <div style="margin-top: 12px; background: #f0fdf4; border: 1px solid #16a34a; padding: 10px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 0.85rem; color: #15803d; font-weight: 700; margin-bottom: 6px;">자동 낚시 상태: <b>${statusDesc}</b></div>
+                    <button onclick="toggleHippocampusAuto()" style="width: 100%; background: ${btnBg}; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: 700; cursor: pointer;">${btnText}</button>
                 </div>
             `;
         }
@@ -1335,6 +1380,287 @@ function setRecordFilter(filter) {
     window.scrollTo(0, currentScroll);
 }
 
+// 🎮 1인칭 시점(First-Person FPS View) 실시간 낚시 시뮬레이션 스테이지 렌더러
+function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaught, currentRod, statusText, actionBtnHtml) {
+    let spotKey = currentSpot.name;
+    
+    // 1인칭 낚싯대 등급별 시각 효과 (색상, 발광 오라, 낚싯줄 색상)
+    let rodGlowStyle = "";
+    let rodStrokeColor = "url(#rodWoodGrad)";
+    let lineStrokeColor = "rgba(255,255,255,0.75)";
+    let rodTipAura = "";
+
+    if (rodLevel >= 11) {
+        rodGlowStyle = "filter: drop-shadow(0 0 10px #f59e0b) drop-shadow(0 0 20px #ec4899);";
+        rodStrokeColor = "url(#rodOmegaGrad)";
+        lineStrokeColor = "#facc15";
+        rodTipAura = `<circle cx="195" cy="45" r="8" fill="url(#omegaTipGlow)" style="animation: cosmicAuraGlow 1.5s infinite;" />`;
+    } else if (rodLevel >= 9) {
+        rodGlowStyle = "filter: drop-shadow(0 0 8px #a855f7) drop-shadow(0 0 15px #3b82f6);";
+        rodStrokeColor = "url(#rodCosmicGrad)";
+        lineStrokeColor = "#c084fc";
+        rodTipAura = `<circle cx="195" cy="45" r="6" fill="#a855f7" opacity="0.8" />`;
+    } else if (rodLevel >= 6) {
+        rodGlowStyle = "filter: drop-shadow(0 0 7px #38bdf8);";
+        rodStrokeColor = "url(#rodPoseidonGrad)";
+        lineStrokeColor = "#38bdf8";
+        rodTipAura = `<circle cx="195" cy="45" r="5" fill="#38bdf8" opacity="0.8" />`;
+    } else if (rodLevel >= 3) {
+        rodGlowStyle = "filter: drop-shadow(0 0 5px #34d399);";
+        rodStrokeColor = "url(#rodTitaniumGrad)";
+        lineStrokeColor = "#34d399";
+        rodTipAura = `<circle cx="195" cy="45" r="4" fill="#34d399" opacity="0.7" />`;
+    } else {
+        rodStrokeColor = "url(#rodWoodGrad)";
+        lineStrokeColor = "rgba(255,255,255,0.7)";
+    }
+
+    // 1인칭 원경 환경 데코레이션
+    let ambientSceneryHtml = "";
+    if (spotKey === '연못') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 15px; left: 15%; font-size: 1.6rem; opacity: 0.75; animation: fpBobberFloat 4s infinite;">🪷</div>
+            <div style="position: absolute; top: 25px; right: 20%; font-size: 1.2rem; opacity: 0.7; animation: fpBobberFloat 3.5s infinite 0.5s;">🍀</div>
+            <div style="position: absolute; top: 80px; left: 25%; font-size: 0.9rem; opacity: 0.65;">🐸</div>
+        `;
+    } else if (spotKey === '계곡') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 10px; left: 12%; font-size: 1.5rem; opacity: 0.8;">🏔️</div>
+            <div style="position: absolute; top: 20px; right: 15%; font-size: 1.3rem; opacity: 0.75; animation: fpBobberFloat 2s infinite;">💦</div>
+            <div style="position: absolute; top: 60px; right: 30%; font-size: 1.1rem; opacity: 0.7;">🪨</div>
+        `;
+    } else if (spotKey === '저수지') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 20px; left: 10%; width: 80%; height: 35px; background: rgba(255,255,255,0.22); filter: blur(14px); border-radius: 50%;"></div>
+            <div style="position: absolute; top: 35px; left: 18%; font-size: 1.4rem; opacity: 0.8; animation: fpBobberFloat 3s infinite;">🌾</div>
+            <div style="position: absolute; top: 40px; right: 22%; font-size: 1.3rem; opacity: 0.75; animation: fpBobberFloat 3.5s infinite 0.6s;">🌾</div>
+        `;
+    } else if (spotKey === '갯벌') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; background: radial-gradient(circle, #f97316 0%, rgba(249,115,22,0) 70%); border-radius: 50%; opacity: 0.85;"></div>
+            <div style="position: absolute; top: 75px; left: 20%; font-size: 1.2rem; opacity: 0.85; animation: fpBobberFloat 2.5s infinite;">🦀</div>
+            <div style="position: absolute; top: 80px; right: 25%; font-size: 1rem; opacity: 0.75;">🐚</div>
+        `;
+    } else if (spotKey === '바다') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 15px; left: 25%; font-size: 1.2rem; opacity: 0.85; animation: fpBobberFloat 4s infinite;">🕊️</div>
+            <div style="position: absolute; top: 22px; right: 30%; font-size: 1rem; opacity: 0.75; animation: fpBobberFloat 4.5s infinite 0.8s;">🕊️</div>
+            <div style="position: absolute; top: 30px; left: 10%; font-size: 1.4rem; opacity: 0.8;">⛵</div>
+        `;
+    } else if (spotKey === '깊은바다') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 25px; left: 20%; font-size: 1.4rem; opacity: 0.8; animation: fpBobberFloat 3s infinite; filter: drop-shadow(0 0 10px #8b5cf6);">🪼</div>
+            <div style="position: absolute; top: 35px; right: 22%; font-size: 1.2rem; opacity: 0.75; animation: fpBobberFloat 2.5s infinite 1s; filter: drop-shadow(0 0 8px #06b6d4);">✨</div>
+            <div style="position: absolute; top: 65px; left: 35%; font-size: 1.1rem; opacity: 0.7; filter: drop-shadow(0 0 6px #3b82f6);">🫧</div>
+        `;
+    } else if (spotKey === '절대자 김병수의 어항') {
+        ambientSceneryHtml = `
+            <div style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 1.6rem; opacity: 0.95; animation: cosmicAuraGlow 2s infinite;">👑</div>
+            <div style="position: absolute; top: 25px; left: 15%; font-size: 1.3rem; opacity: 0.85; animation: fpBobberFloat 2s infinite; filter: drop-shadow(0 0 12px #eab308);">✨</div>
+            <div style="position: absolute; top: 20px; right: 18%; font-size: 1.2rem; opacity: 0.8; animation: fpBobberFloat 3s infinite 0.5s;">🌌</div>
+        `;
+    }
+
+    // 1인칭 상태별 애니메이션 클래스 & 인터랙티브 씬
+    let stageShakeStyle = (fishingStep === 'bite') ? 'animation: stageShakeAnim 0.25s infinite;' : '';
+    let rodMotionStyle = "animation: fpBreatheIdle 3s ease-in-out infinite;";
+    let rodPathD = "M 330 250 Q 280 160, 195 45"; // 1인칭 낚싯대 곡선 (우측하단 손잡이 -> 중앙 전방 초릿대)
+    let linePathD = "M 195 45 Q 197 85, 195 125";  // 낚싯줄 (초릿대 -> 수면 중앙 찌)
+
+    if (fishingStep === 'bite') {
+        rodMotionStyle = "animation: fpRodStrainShake 0.12s infinite;";
+        rodPathD = "M 330 250 Q 270 190, 195 90"; // 입질 시 아래로 홱 꺾인 낚싯대
+        linePathD = "M 195 90 L 195 145";          // 팽팽하게 당겨진 붉은 낚싯줄
+    }
+
+    let centerInteractiveHtml = "";
+
+    if (fishingStep === 'ready') {
+        let lastCatchPopup = "";
+        if (lastCaught) {
+            let color = (FISH_DATABASE.find(f => f.name === lastCaught.name) || {}).color || '#38bdf8';
+            lastCatchPopup = `
+                <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); border: 2px solid ${color}; border-radius: 14px; padding: 10px 18px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.6); animation: fpFishLeapToCamera 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; z-index: 25; min-width: 180px;">
+                    <div style="font-size: 0.72rem; color: ${color}; font-weight: 900;">✨ 낚아올린 어종 획득!</div>
+                    <div style="font-size: 1.3rem; font-weight: 900; color: #fff; margin: 2px 0;">🐟 ${lastCaught.name}</div>
+                    <div style="font-size: 0.82rem; color: #cbd5e1;">크기: <b style="color: #38bdf8;">${lastCaught.displaySize || lastCaught.size + '자'}</b></div>
+                    <div style="font-size: 0.78rem; color: #facc15; font-weight: 800; margin-top: 2px;">가치: ${lastCaught.displayPrice || ''}</div>
+                </div>
+            `;
+        }
+
+        centerInteractiveHtml = `
+            ${lastCatchPopup}
+            <!-- 1인칭 찌 (준비 대기) -->
+            <div style="position: absolute; top: 118px; left: 50%; transform: translateX(-50%); font-size: 1.35rem; opacity: 0.85; animation: fpBobberFloat 2.5s infinite;">
+                🔴
+            </div>
+            <div style="position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); padding: 5px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap; z-index: 10;">
+                🎣 [1인칭 시점] 낚싯대를 던져 손맛을 느껴보세요!
+            </div>
+        `;
+    } else if (fishingStep === 'waiting') {
+        centerInteractiveHtml = `
+            <!-- 3D 원근 타원형 물결 파문 -->
+            <div style="position: absolute; top: 122px; left: 50%; transform: translateX(-50%); width: 28px; height: 12px; border: 2px solid rgba(255,255,255,0.8); border-radius: 50%; animation: fpRipple3D 2s cubic-bezier(0,0.2,0.8,1) infinite;"></div>
+            <div style="position: absolute; top: 122px; left: 50%; transform: translateX(-50%); width: 28px; height: 12px; border: 2px solid rgba(56, 189, 248, 0.8); border-radius: 50%; animation: fpRipple3D 2s cubic-bezier(0,0.2,0.8,1) infinite 0.7s;"></div>
+
+            <!-- 수면 정중앙 찌 (Bobber) -->
+            <div style="position: absolute; top: 110px; left: 50%; transform: translateX(-50%); font-size: 1.45rem; animation: fpBobberFloat 1.2s ease-in-out infinite; z-index: 6;">
+                🔴
+            </div>
+
+            <!-- 깊은 물속에서 찌를 향해 스르륵 헤엄쳐 다가오는 1인칭 그림자 물고기 -->
+            <div style="position: absolute; top: 135px; left: 45%; font-size: 1.8rem; opacity: 0.75; filter: brightness(0.15) blur(0.5px); animation: fpShadowFishSwim 3.5s ease-in-out infinite; z-index: 4;">
+                🐟
+            </div>
+
+            <!-- 상태 배지 -->
+            <div style="position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); background: rgba(2, 132, 199, 0.9); padding: 5px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 4px 14px rgba(0,0,0,0.4); white-space: nowrap; z-index: 10;">
+                👀 찌를 주시하세요... 물고기가 다가오고 있습니다!
+            </div>
+        `;
+    } else if (fishingStep === 'bite') {
+        centerInteractiveHtml = `
+            <!-- 0.75초 긴박한 카운트다운 타이머 바 -->
+            <div style="position: absolute; top: 10px; left: 10%; width: 80%; height: 9px; background: rgba(0,0,0,0.6); border-radius: 10px; overflow: hidden; border: 1px solid #ef4444; z-index: 30;">
+                <div style="height: 100%; animation: timerBarShrink 0.75s linear forwards;"></div>
+            </div>
+
+            <!-- 화면 정면으로 튀어오르는 거대한 물보라 및 번개 스파크 -->
+            <div style="position: absolute; top: 105px; left: 45%; font-size: 2.8rem; animation: fpSplashTowardsCamera 0.55s infinite; z-index: 12;">
+                💦
+            </div>
+            <div style="position: absolute; top: 85px; left: 52%; font-size: 2.2rem; animation: fpSplashTowardsCamera 0.5s infinite 0.15s; z-index: 12;">
+                ⚡
+            </div>
+
+            <!-- 물속으로 푹 빨려 들어간 찌 -->
+            <div style="position: absolute; top: 130px; left: 50%; transform: translateX(-50%); font-size: 1.4rem; animation: fpBiteDunk 0.25s forwards; z-index: 6;">
+                🔴
+            </div>
+
+            <!-- 1인칭 HIT 알림 배너 -->
+            <div style="position: absolute; top: 26px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; padding: 7px 22px; border-radius: 20px; font-size: 1.05rem; font-weight: 900; border: 2px solid #fecaca; box-shadow: 0 0 25px rgba(239,68,68,0.9); z-index: 30; animation: fpRodStrainShake 0.15s infinite; white-space: nowrap;">
+                🚨 HIT!! 지금 바로 낚아채세요!! (0.75초) 🚨
+            </div>
+        `;
+    }
+
+    return `
+        <!-- 1인칭 시점 낚시 애니메이션 전용 스타일 -->
+        <style>
+            @keyframes fpBreatheIdle { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-2px, -4px) rotate(-0.5deg); } }
+            @keyframes fpBobberFloat { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-7px) rotate(6deg); } }
+            @keyframes fpRipple3D { 0% { transform: scale(0.2, 0.1); opacity: 0.9; } 100% { transform: scale(2.8, 1.4); opacity: 0; } }
+            @keyframes fpShadowFishSwim { 0% { transform: translate(60px, 20px) scale(0.5); opacity: 0; } 40% { transform: translate(15px, -5px) scale(0.85); opacity: 0.75; } 70% { transform: translate(-5px, 3px) scale(1); opacity: 0.95; } 100% { transform: translate(-50px, 20px) scale(0.65); opacity: 0.2; } }
+            @keyframes fpRodStrainShake { 0%, 100% { transform: translate(0, 8px) rotate(4deg); } 25% { transform: translate(-3px, 12px) rotate(5.5deg); } 50% { transform: translate(3px, 7px) rotate(3.5deg); } 75% { transform: translate(-2px, 11px) rotate(5deg); } }
+            @keyframes fpBiteDunk { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(22px) scale(0.8); } }
+            @keyframes fpSplashTowardsCamera { 0% { transform: scale(0.2) translateY(0); opacity: 1; } 50% { transform: scale(1.6) translateY(-15px); opacity: 0.95; } 100% { transform: scale(2.6) translateY(-30px); opacity: 0; } }
+            @keyframes fpFishLeapToCamera { 0% { transform: translateY(80px) scale(0.1) rotate(-20deg); opacity: 0; } 50% { transform: translateY(-30px) scale(1.35) rotate(10deg); opacity: 1; } 75% { transform: translateY(-15px) scale(1.1) rotate(-5deg); opacity: 1; } 100% { transform: translateY(0px) scale(1) rotate(0deg); opacity: 1; } }
+            @keyframes fpWaterPerspWave { 0% { transform: translateY(0); } 50% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+            @keyframes cosmicAuraGlow { 0%, 100% { filter: drop-shadow(0 0 8px #f59e0b) drop-shadow(0 0 18px #ec4899); } 50% { filter: drop-shadow(0 0 16px #3b82f6) drop-shadow(0 0 24px #a855f7); } }
+            @keyframes timerBarShrink { 0% { width: 100%; background: #22c55e; } 50% { width: 50%; background: #eab308; } 100% { width: 0%; background: #ef4444; } }
+        </style>
+
+        <!-- 🎮 1인칭 시점(FPS View) 그래픽 낚시 시뮬레이션 스테이지 -->
+        <div style="position: relative; background: ${currentSpot.bgGradient}; border: 2px solid ${currentSpot.themeColor}; border-radius: 16px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 12px 30px rgba(0,0,0,0.28); color: white; ${stageShakeStyle}">
+            
+            <!-- 상단 낚시터 정보 바 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.45); padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.15); font-size: 0.78rem; font-weight: 800; z-index: 10; position: relative;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 1rem;">${currentSpot.icon}</span>
+                    <span>${currentSpot.name}</span>
+                    <span style="background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">1인칭 시점 🎥</span>
+                </div>
+                <div style="opacity: 0.85; font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;">${currentSpot.desc}</div>
+            </div>
+
+            <!-- 1인칭 3D 뷰포트 (높이 230px) -->
+            <div style="position: relative; height: 230px; width: 100%; overflow: hidden; perspective: 700px;">
+                
+                <!-- 1. 상단 원경 풍경 & 데코 -->
+                ${ambientSceneryHtml}
+
+                <!-- 2. 3D 원근 수면 레이어 (Horizon at Y: 105px) -->
+                <div style="position: absolute; top: 105px; left: 0; width: 100%; height: 125px; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.4) 100%); pointer-events: none;">
+                    <!-- 수면 지평선 잔물결 곡선 -->
+                    <svg viewBox="0 0 600 60" style="position: absolute; top: -10px; left: 0; width: 100%; height: 25px; opacity: 0.7; animation: fpWaterPerspWave 4s ease-in-out infinite;" preserveAspectRatio="none">
+                        <path d="M0,15 Q150,0 300,15 T600,15 L600,60 L0,60 Z" fill="rgba(255,255,255,0.15)"></path>
+                    </svg>
+                </div>
+
+                <!-- 3. 1인칭 손 & 낚싯대 SVG 레이어 (우측 하단에서 화면 중앙 전방으로 뻗어나감) -->
+                <svg viewBox="0 0 380 240" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 8;">
+                    <defs>
+                        <linearGradient id="rodWoodGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#fbbf24" />
+                            <stop offset="100%" stop-color="#78350f" />
+                        </linearGradient>
+                        <linearGradient id="rodTitaniumGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#34d399" />
+                            <stop offset="100%" stop-color="#0f766e" />
+                        </linearGradient>
+                        <linearGradient id="rodPoseidonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#38bdf8" />
+                            <stop offset="100%" stop-color="#1d4ed8" />
+                        </linearGradient>
+                        <linearGradient id="rodCosmicGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#c084fc" />
+                            <stop offset="100%" stop-color="#6b21a8" />
+                        </linearGradient>
+                        <linearGradient id="rodOmegaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#f43f5e" />
+                            <stop offset="50%" stop-color="#facc15" />
+                            <stop offset="100%" stop-color="#3b82f6" />
+                        </linearGradient>
+                        <radialGradient id="omegaTipGlow">
+                            <stop offset="0%" stop-color="#fff" />
+                            <stop offset="100%" stop-color="#f59e0b" />
+                        </radialGradient>
+                    </defs>
+
+                    <!-- 1인칭 낚싯줄 (초릿대 -> 수면 찌) -->
+                    <path d="${linePathD}" fill="none" stroke="${lineStrokeColor}" stroke-width="${fishingStep === 'bite' ? '2.8' : '1.5'}" stroke-dasharray="${fishingStep === 'bite' ? 'none' : '3,2'}" />
+
+                    <!-- 1인칭 낚싯대 몸체 (우측 하단 손잡이 -> 중앙 전방 초릿대) -->
+                    <g style="${rodMotionStyle} ${rodGlowStyle}">
+                        <!-- 낚싯대 블랭크 (Rod Pole) -->
+                        <path d="${rodPathD}" fill="none" stroke="${rodStrokeColor}" stroke-width="7" stroke-linecap="round" />
+                        <path d="${rodPathD}" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2" stroke-linecap="round" />
+
+                        <!-- 낚싯대 가이드 링 (Guide Rings) -->
+                        <circle cx="280" cy="165" r="4" fill="none" stroke="#e2e8f0" stroke-width="2" />
+                        <circle cx="235" cy="100" r="3" fill="none" stroke="#e2e8f0" stroke-width="1.8" />
+                        <circle cx="202" cy="55" r="2.2" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
+
+                        <!-- 낚싯대 끝 초릿대 오라 -->
+                        ${rodTipAura}
+
+                        <!-- 스피닝 릴 (Reel) & 낚싯대 손잡이 -->
+                        <ellipse cx="325" cy="215" rx="14" ry="10" fill="#334155" stroke="#64748b" stroke-width="2" />
+                        <rect x="318" y="200" width="14" height="6" rx="2" fill="#94a3b8" />
+                        
+                        <!-- 1인칭 플레이어의 손/장갑 -->
+                        <path d="M 335 240 Q 345 220, 365 225 Q 380 240, 360 255 Z" fill="#475569" stroke="#1e293b" stroke-width="2" />
+                    </g>
+                </svg>
+
+                <!-- 4. 상태별 인터랙티브 씬 (찌, 파문, 그림자 물고기, HIT, 낚아챔) -->
+                ${centerInteractiveHtml}
+            </div>
+
+            <!-- 하단 조작 액션 버튼 및 상태 텍스트 -->
+            <div style="background: rgba(15, 23, 42, 0.85); padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.15); text-align: center;">
+                <div id="fishingStatusText" style="font-size: 0.95rem; font-weight: 800; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.6); margin-bottom: 10px; line-height: 1.3;">
+                    ${statusText}
+                </div>
+                ${actionBtnHtml}
+            </div>
+        </div>
+    `;
+}
+
 async function renderFishingView(contentArea) {
     let currentRod = ROD_TIERS[fishingData.rod_level];
     let nextRod = ROD_TIERS[fishingData.rod_level + 1];
@@ -1420,7 +1746,7 @@ async function renderFishingView(contentArea) {
                 actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0284c7, #0369a1);">🎣 낚싯대 던지기 (비용: ${currentRod.cost.toLocaleString()}원)</button>`;
             }
         } else if (fishingStep === 'waiting') {
-            let hasHippocampus = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('히포캠포스');
+            let hasHippocampus = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('히포캠포스') && hippocampusAutoActive;
             statusText = hasHippocampus ? '⚡ [히포캠포스] 나침반의 가속을 받아 대어를 낚아채는 중...' : '물고기가 미끼 주변을 서성이는 중...';
             actionBtnHtml = `<button onclick="earlyClickAlert()" style="width: 100%; padding: 16px; background: #64748b; border: none; border-radius: 12px; color: white; font-size: 1.1rem; font-weight: 700; cursor: pointer;">대어 기다리는 중... (누르면 취소)</button>`;
         } else if (fishingStep === 'bite') {
@@ -1503,9 +1829,9 @@ async function renderFishingView(contentArea) {
 
     // --- 📖 어류 도감 완성도 계산 및 렌더링 ---
     let totalFishCount = FISH_DATABASE.length; // 177종
-    let discoveredNames = Object.keys(fishingData.fish_records || {}).filter(k => k !== '길냥이의 물고기' && k !== '붕');
-    let totalDiscoveredCount = discoveredNames.length;
-    let overallProgressPct = ((totalDiscoveredCount / totalFishCount) * 100).toFixed(1);
+    let discoveredFishList = FISH_DATABASE.filter(f => fishingData.fish_records && fishingData.fish_records[f.name]);
+    let totalDiscoveredCount = discoveredFishList.length;
+    let overallProgressPct = totalFishCount > 0 ? ((totalDiscoveredCount / totalFishCount) * 100).toFixed(1) : "0.0";
 
     const gradesList = ['일반', '희귀', '영웅', '전설', '신화', '태초'];
     const gradeColors = {
@@ -1773,18 +2099,8 @@ async function renderFishingView(contentArea) {
 
             ${makaraBoosterHtml}
 
-            <!-- 🎣 낚시터 테마별 메인 낚시 공간 -->
-            <div style="position: relative; background: ${currentSpot.bgGradient}; border: 2px solid ${currentSpot.themeColor}; border-radius: 14px; padding: 22px; text-align: center; margin-bottom: 16px; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.18);">
-                <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.35); padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);">
-                    <span>${currentSpot.icon} ${currentSpot.name}</span>
-                    <span style="opacity: 0.7;">|</span>
-                    <span style="opacity: 0.95;">${currentSpot.desc}</span>
-                </div>
-                <div id="fishingStatusText" style="font-size: 1.05rem; font-weight: 800; color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.6); margin-bottom: 14px; line-height: 1.4;">
-                    ${statusText}
-                </div>
-                ${actionBtnHtml}
-            </div>
+            <!-- 🎮 실시간 그래픽 낚시 시뮬레이션 스테이지 -->
+            ${renderAnimatedFishingStage(currentSpot, fishingStep, fishingData.rod_level, lastCaughtResult, currentRod, statusText, actionBtnHtml)}
 
             <div style="margin-bottom: 20px;">
                 ${nextRod ? `
@@ -1848,10 +2164,11 @@ async function startCast() {
         return;
     }
 
+    lastCaughtResult = null; // 새 캐스팅 시작 시 이전 결과 리셋
     fishingData.money -= effectiveCost;
     await saveFishingData();
 
-    let hasHippocampus = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('히포캠포스');
+    let hasHippocampus = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('히포캠포스') && hippocampusAutoActive;
 
     if (hasHippocampus) {
         fishingStep = 'waiting';
@@ -1866,6 +2183,7 @@ async function startCast() {
         setTimeout(() => {
             if (fishingStep === 'waiting') {
                 let caught = executeCatchLogic();
+                lastCaughtResult = caught;
                 let sizeMsg = caught.displaySize || `${caught.size}자`;
                 let priceMsg = caught.displayPrice ? ` [💰 ${caught.displayPrice}]` : '';
                 showFloatingAlert(`🎣 [히포캠포스] 대어 낚시 성공! 🐟 ${caught.name} (${sizeMsg})${priceMsg}`);
@@ -1895,6 +2213,7 @@ async function startCast() {
             biteTimer = setTimeout(() => {
                 if (fishingStep === 'bite') {
                     fishingStep = 'ready';
+                    lastCaughtResult = null;
                     showFloatingAlert("❌ 타이밍을 놓쳐 물고기가 도망쳤습니다!");
                     let contentArea = document.getElementById("contentArea");
                     if (contentArea) renderFishingView(contentArea);
@@ -1912,6 +2231,7 @@ function earlyClickAlert() {
         clearTimeout(biteTimeout);
         clearTimeout(biteTimer);
         fishingStep = 'ready';
+        lastCaughtResult = null;
         showFloatingAlert("❌ 낚싯대를 일찍 거두어 물고기가 도망쳤습니다.");
         let contentArea = document.getElementById("contentArea");
         if (contentArea) renderFishingView(contentArea);
@@ -1955,6 +2275,7 @@ async function hookFish() {
 
             fishingData.money = Math.max(0, fishingData.money - penalty);
             fishingStep = 'ready';
+            lastCaughtResult = null;
             await saveFishingData();
 
             showTrashPopup(trashMsg);
@@ -1966,6 +2287,7 @@ async function hookFish() {
     }
 
     let caught = executeCatchLogic();
+    lastCaughtResult = caught; // 스테이지에 잡힌 물고기 점프 연출 표시
     let sizeMsg = caught.displaySize || `${caught.size}자`;
     let priceMsg = caught.displayPrice ? ` [💰 ${caught.displayPrice}]` : '';
     showFloatingAlert(`🎣 낚시 성공! 🐟 ${caught.name} (${sizeMsg})${priceMsg}`);
@@ -2317,6 +2639,7 @@ window.rejectIncomingTrade = rejectIncomingTrade;
 window.openTradeRoom = openTradeRoom;
 window.executeFinalRoomTrade = executeFinalRoomTrade;
 window.toggleBahamutAuto = toggleBahamutAuto;
+window.toggleHippocampusAuto = toggleHippocampusAuto;
 window.setRecordFilter = setRecordFilter;
 window.setSpotFilter = setSpotFilter;
 window.selectFishingSpot = selectFishingSpot;
