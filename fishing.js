@@ -37,6 +37,28 @@ let lastCaughtResult = null;     // 방금 낚아올린 어류 (생동감 넘치
 
 const MAX_COMPASS_LEVEL = 24; // 나침반 최대 레벨 24 (은화는 무한 상승)
 
+function formatMoneyKorean(num) {
+    if (!num || num === 0) return '0원';
+    if (num >= 1000000000000) { // 조 단위
+        let jo = Math.floor(num / 1000000000000);
+        let remainder = num % 1000000000000;
+        let eok = Math.floor(remainder / 100000000);
+        return eok > 0 ? `${jo}조 ${eok.toLocaleString()}억원` : `${jo}조원`;
+    }
+    if (num >= 100000000) { // 억 단위
+        let eok = Math.floor(num / 100000000);
+        let remainder = num % 100000000;
+        let man = Math.floor(remainder / 10000);
+        return man > 0 ? `${eok}억 ${man.toLocaleString()}만원` : `${eok}억원`;
+    }
+    if (num >= 10000) { // 만 단위
+        let man = Math.floor(num / 10000);
+        let remainder = num % 10000;
+        return remainder > 0 ? `${man}만 ${remainder.toLocaleString()}원` : `${man}만원`;
+    }
+    return `${num.toLocaleString()}원`;
+}
+
 const ROD_TIERS = {
     1: { name: '🪵 나무 낚시대', price: 0, cost: 80 },
     2: { name: '🎣 튼튼한 대나무 낚시대', price: 5000, cost: 200 },
@@ -50,6 +72,346 @@ const ROD_TIERS = {
     10: { name: '🌟 우주 신들의 낚시대', price: 600000000, cost: 100000 },
     11: { name: '🌌 차원 공허의 시공간 낚시대', price: 5000000000000, cost: 500000 },
     12: { name: '⚛️ 태초의 창조주 오메가 낚시대 (최종)', price: 100000000000000, cost: 2500000 }
+};
+
+// 🎨 12단계 고유 낚싯대 스킨 그래픽 설정 (티어가 오를수록 화려한 비주얼 & 발광 효과)
+const ROD_SKINS = {
+    1: {
+        name: '🪵 나무 낚시대',
+        theme: '클래식 원목',
+        gradId: 'rodGrad_1',
+        gradDef: `
+            <linearGradient id="rodGrad_1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#d97706" />
+                <stop offset="50%" stop-color="#92400e" />
+                <stop offset="100%" stop-color="#451a03" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));',
+        width: 6,
+        lineColor: 'rgba(254, 243, 199, 0.8)',
+        lineDash: '3,2',
+        guidesColor: '#ca8a04',
+        guidesWidth: 1.6,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="13" ry="10" fill="#78350f" stroke="#b45309" stroke-width="2" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#ca8a04" />
+        `,
+        tipAura: `<circle cx="195" cy="45" r="4" fill="#d97706" opacity="0.6" />`
+    },
+    2: {
+        name: '🎣 튼튼한 대나무 낚시대',
+        theme: '청명한 대나무',
+        gradId: 'rodGrad_2',
+        gradDef: `
+            <linearGradient id="rodGrad_2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#86efac" />
+                <stop offset="35%" stop-color="#22c55e" />
+                <stop offset="70%" stop-color="#15803d" />
+                <stop offset="100%" stop-color="#14532d" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 5px #22c55e);',
+        width: 6.5,
+        lineColor: '#86efac',
+        lineDash: 'none',
+        guidesColor: '#facc15',
+        guidesWidth: 2,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="13" ry="10" fill="#15803d" stroke="#86efac" stroke-width="2" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#facc15" />
+            <line x1="280" y1="165" x2="284" y2="161" stroke="#facc15" stroke-width="3" />
+            <line x1="235" y1="100" x2="239" y2="96" stroke="#facc15" stroke-width="2.5" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="5" fill="#4ade80" opacity="0.8" />
+            <text x="180" y="38" font-size="12" style="animation: fpBobberFloat 2s infinite;">🍃</text>
+        `
+    },
+    3: {
+        name: '🌊 심해 탐사 퀀텀 낚시대',
+        theme: '바이오 심해 퀀텀',
+        gradId: 'rodGrad_3',
+        gradDef: `
+            <linearGradient id="rodGrad_3" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#38bdf8" />
+                <stop offset="40%" stop-color="#0284c7" />
+                <stop offset="80%" stop-color="#0369a1" />
+                <stop offset="100%" stop-color="#082f49" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 8px #38bdf8) drop-shadow(0 0 14px #0284c7);',
+        width: 6.8,
+        lineColor: '#38bdf8',
+        lineDash: 'none',
+        guidesColor: '#7dd3fc',
+        guidesWidth: 2.2,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="14" ry="10" fill="#0f172a" stroke="#38bdf8" stroke-width="2.5" />
+            <circle cx="320" cy="218" r="5" fill="#0284c7" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#38bdf8" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="7" fill="#38bdf8" opacity="0.9" />
+            <text x="182" y="36" font-size="13" style="animation: fpBobberFloat 2.5s infinite;">🫧</text>
+        `
+    },
+    4: {
+        name: '✨ 탄소섬유 프로 낚시대',
+        theme: '레이싱 카본 그라파이트',
+        gradId: 'rodGrad_4',
+        gradDef: `
+            <linearGradient id="rodGrad_4" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f87171" />
+                <stop offset="20%" stop-color="#475569" />
+                <stop offset="60%" stop-color="#1e293b" />
+                <stop offset="100%" stop-color="#090d16" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 6px #ef4444) drop-shadow(0 0 10px rgba(255,255,255,0.4));',
+        width: 7,
+        lineColor: '#bef264',
+        lineDash: 'none',
+        guidesColor: '#e2e8f0',
+        guidesWidth: 2.2,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="14" ry="10" fill="#0f172a" stroke="#ef4444" stroke-width="2.5" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#e2e8f0" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="6" fill="#ef4444" opacity="0.95" />
+            <circle cx="195" cy="45" r="2.5" fill="#ffffff" />
+        `
+    },
+    5: {
+        name: '⚡ 마력 충전 티타늄 낚시대',
+        theme: '에메랄드 라이트닝 티타늄',
+        gradId: 'rodGrad_5',
+        gradDef: `
+            <linearGradient id="rodGrad_5" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#a7f3d0" />
+                <stop offset="30%" stop-color="#10b981" />
+                <stop offset="70%" stop-color="#047857" />
+                <stop offset="100%" stop-color="#064e3b" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 8px #10b981) drop-shadow(0 0 16px #34d399);',
+        width: 7.2,
+        lineColor: '#22d3ee',
+        lineDash: 'none',
+        guidesColor: '#6ee7b7',
+        guidesWidth: 2.5,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="14" ry="10" fill="#064e3b" stroke="#34d399" stroke-width="2.5" />
+            <polygon points="317,213 323,213 318,223 324,223" fill="#facc15" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#a7f3d0" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="8" fill="#10b981" opacity="0.9" />
+            <text x="183" y="38" font-size="14" style="animation: stageShakeAnim 0.2s infinite;">⚡</text>
+        `
+    },
+    6: {
+        name: '🔱 포세이돈의 삼지창 낚시대',
+        theme: '심해의 신 포세이돈',
+        gradId: 'rodGrad_6',
+        gradDef: `
+            <linearGradient id="rodGrad_6" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#fde047" />
+                <stop offset="30%" stop-color="#38bdf8" />
+                <stop offset="70%" stop-color="#1d4ed8" />
+                <stop offset="100%" stop-color="#172554" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 10px #38bdf8) drop-shadow(0 0 20px #eab308);',
+        width: 7.5,
+        lineColor: '#67e8f9',
+        lineDash: 'none',
+        guidesColor: '#facc15',
+        guidesWidth: 2.8,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="15" ry="11" fill="#1e3a8a" stroke="#facc15" stroke-width="3" />
+            <circle cx="320" cy="218" r="5" fill="#38bdf8" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#fde047" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="9" fill="#0284c7" opacity="0.9" />
+            <text x="182" y="37" font-size="16" style="filter: drop-shadow(0 0 8px #facc15); animation: fpBobberFloat 2s infinite;">🔱</text>
+        `
+    },
+    7: {
+        name: '🔥 용황의 숨결 낚시대',
+        theme: '화염의 용황 마그마',
+        gradId: 'rodGrad_7',
+        gradDef: `
+            <linearGradient id="rodGrad_7" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#fef08a" />
+                <stop offset="25%" stop-color="#f97316" />
+                <stop offset="65%" stop-color="#dc2626" />
+                <stop offset="100%" stop-color="#450a0a" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 12px #f97316) drop-shadow(0 0 22px #ef4444);',
+        width: 7.8,
+        lineColor: '#fdba74',
+        lineDash: 'none',
+        guidesColor: '#f97316',
+        guidesWidth: 3,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="15" ry="11" fill="#450a0a" stroke="#ea580c" stroke-width="3" />
+            <circle cx="320" cy="218" r="6" fill="#f97316" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#fbbf24" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="10" fill="#ea580c" opacity="0.9" style="animation: pulse 0.8s infinite;" />
+            <text x="182" y="37" font-size="17" style="animation: fpSplashTowardsCamera 1s infinite;">🔥</text>
+        `
+    },
+    8: {
+        name: '💎 아틀란티스 헤리티지',
+        theme: '찬란한 고대 아틀란티스 다이아',
+        gradId: 'rodGrad_8',
+        gradDef: `
+            <linearGradient id="rodGrad_8" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ffffff" />
+                <stop offset="25%" stop-color="#a5f3fc" />
+                <stop offset="50%" stop-color="#38bdf8" />
+                <stop offset="75%" stop-color="#818cf8" />
+                <stop offset="100%" stop-color="#312e81" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 12px #67e8f9) drop-shadow(0 0 24px #c084fc);',
+        width: 8,
+        lineColor: '#a5f3fc',
+        lineDash: 'none',
+        guidesColor: '#c4b5fd',
+        guidesWidth: 3,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="15" ry="11" fill="#1e1b4b" stroke="#38bdf8" stroke-width="3" />
+            <polygon points="320,211 326,218 320,225 314,218" fill="#e0e7ff" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#a5f3fc" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="10" fill="#a5f3fc" opacity="0.95" />
+            <text x="181" y="37" font-size="17" style="filter: drop-shadow(0 0 10px #38bdf8); animation: fpBobberFloat 2s infinite;">💎</text>
+        `
+    },
+    9: {
+        name: '👑 코스믹 차원 낚시대',
+        theme: '성운의 코스믹 바이올렛',
+        gradId: 'rodGrad_9',
+        gradDef: `
+            <linearGradient id="rodGrad_9" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#fdf4ff" />
+                <stop offset="30%" stop-color="#e879f9" />
+                <stop offset="70%" stop-color="#9333ea" />
+                <stop offset="100%" stop-color="#3b0764" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 14px #c084fc) drop-shadow(0 0 26px #ec4899);',
+        width: 8.2,
+        lineColor: '#f0abfc',
+        lineDash: 'none',
+        guidesColor: '#e879f9',
+        guidesWidth: 3.2,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="16" ry="12" fill="#2e1065" stroke="#e879f9" stroke-width="3" />
+            <circle cx="320" cy="218" r="6" fill="#c084fc" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#f0abfc" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="11" fill="#a855f7" opacity="0.9" />
+            <text x="180" y="36" font-size="18" style="filter: drop-shadow(0 0 12px #d946ef); animation: cosmicAuraGlow 1.8s infinite;">🌌</text>
+        `
+    },
+    10: {
+        name: '🌟 우주 신들의 낚시대',
+        theme: '찬란한 신성 천상계 골드',
+        gradId: 'rodGrad_10',
+        gradDef: `
+            <linearGradient id="rodGrad_10" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ffffff" />
+                <stop offset="25%" stop-color="#fef08a" />
+                <stop offset="55%" stop-color="#eab308" />
+                <stop offset="85%" stop-color="#b45309" />
+                <stop offset="100%" stop-color="#78350f" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 16px #facc15) drop-shadow(0 0 30px #ffffff);',
+        width: 8.5,
+        lineColor: '#fef08a',
+        lineDash: 'none',
+        guidesColor: '#fde047',
+        guidesWidth: 3.4,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="16" ry="12" fill="#78350f" stroke="#facc15" stroke-width="3.5" />
+            <circle cx="320" cy="218" r="7" fill="#ffffff" style="filter: drop-shadow(0 0 8px #fde047);" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#ffffff" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="12" fill="#facc15" opacity="0.95" style="animation: pulse 1s infinite;" />
+            <text x="179" y="36" font-size="19" style="filter: drop-shadow(0 0 15px #fde047); animation: fpBobberFloat 1.8s infinite;">🌟</text>
+        `
+    },
+    11: {
+        name: '🌌 차원 공허의 시공간 낚시대',
+        theme: '시공간 특이점 보이드 왜곡',
+        gradId: 'rodGrad_11',
+        gradDef: `
+            <linearGradient id="rodGrad_11" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#06b6d4" />
+                <stop offset="25%" stop-color="#020617" />
+                <stop offset="50%" stop-color="#d946ef" />
+                <stop offset="75%" stop-color="#020617" />
+                <stop offset="100%" stop-color="#06b6d4" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 18px #06b6d4) drop-shadow(0 0 32px #d946ef);',
+        width: 8.8,
+        lineColor: '#67e8f9',
+        lineDash: 'none',
+        guidesColor: '#22d3ee',
+        guidesWidth: 3.5,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="16" ry="12" fill="#020617" stroke="#06b6d4" stroke-width="3.5" />
+            <circle cx="320" cy="218" r="7" fill="#d946ef" style="animation: pulse 0.6s infinite;" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="#67e8f9" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="13" fill="#06b6d4" opacity="0.95" style="animation: stageShakeAnim 0.3s infinite;" />
+            <text x="178" y="36" font-size="20" style="filter: drop-shadow(0 0 18px #06b6d4); animation: cosmicAuraGlow 1.2s infinite;">🌀</text>
+        `
+    },
+    12: {
+        name: '⚛️ 태초의 창조주 오메가 낚시대 (최종)',
+        theme: '창조주 오메가 레인보우 슈퍼노바',
+        gradId: 'rodGrad_12',
+        gradDef: `
+            <linearGradient id="rodGrad_12" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ff007f" />
+                <stop offset="20%" stop-color="#ffaa00" />
+                <stop offset="40%" stop-color="#ffff00" />
+                <stop offset="60%" stop-color="#00ffcc" />
+                <stop offset="80%" stop-color="#0088ff" />
+                <stop offset="100%" stop-color="#9900ff" />
+            </linearGradient>
+        `,
+        glow: 'filter: drop-shadow(0 0 20px #ff007f) drop-shadow(0 0 35px #00ffcc) drop-shadow(0 0 50px #ffaa00);',
+        width: 9.2,
+        lineColor: '#ffffff',
+        lineDash: 'none',
+        guidesColor: '#facc15',
+        guidesWidth: 3.8,
+        reelHtml: `
+            <ellipse cx="320" cy="218" rx="17" ry="13" fill="#000000" stroke="url(#rodGrad_12)" stroke-width="4" />
+            <circle cx="320" cy="218" r="8" fill="#ffffff" style="animation: cosmicAuraGlow 0.8s infinite;" />
+            <rect x="312" y="204" width="16" height="6" rx="2" fill="url(#rodGrad_12)" />
+        `,
+        tipAura: `
+            <circle cx="195" cy="45" r="15" fill="#ffffff" opacity="0.95" style="animation: cosmicAuraGlow 0.8s infinite;" />
+            <text x="176" y="36" font-size="22" style="filter: drop-shadow(0 0 25px #ffffff) drop-shadow(0 0 35px #facc15); animation: fpBobberFloat 1.2s infinite;">⚛️</text>
+        `
+    }
 };
 
 // 🗺️ 7대 고유 낚시터 테마 및 설정
@@ -1384,36 +1746,12 @@ function setRecordFilter(filter) {
 function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaught, currentRod, statusText, actionBtnHtml) {
     let spotKey = currentSpot.name;
     
-    // 1인칭 낚싯대 등급별 시각 효과 (색상, 발광 오라, 낚싯줄 색상)
-    let rodGlowStyle = "";
-    let rodStrokeColor = "url(#rodWoodGrad)";
-    let lineStrokeColor = "rgba(255,255,255,0.75)";
-    let rodTipAura = "";
-
-    if (rodLevel >= 11) {
-        rodGlowStyle = "filter: drop-shadow(0 0 10px #f59e0b) drop-shadow(0 0 20px #ec4899);";
-        rodStrokeColor = "url(#rodOmegaGrad)";
-        lineStrokeColor = "#facc15";
-        rodTipAura = `<circle cx="195" cy="45" r="8" fill="url(#omegaTipGlow)" style="animation: cosmicAuraGlow 1.5s infinite;" />`;
-    } else if (rodLevel >= 9) {
-        rodGlowStyle = "filter: drop-shadow(0 0 8px #a855f7) drop-shadow(0 0 15px #3b82f6);";
-        rodStrokeColor = "url(#rodCosmicGrad)";
-        lineStrokeColor = "#c084fc";
-        rodTipAura = `<circle cx="195" cy="45" r="6" fill="#a855f7" opacity="0.8" />`;
-    } else if (rodLevel >= 6) {
-        rodGlowStyle = "filter: drop-shadow(0 0 7px #38bdf8);";
-        rodStrokeColor = "url(#rodPoseidonGrad)";
-        lineStrokeColor = "#38bdf8";
-        rodTipAura = `<circle cx="195" cy="45" r="5" fill="#38bdf8" opacity="0.8" />`;
-    } else if (rodLevel >= 3) {
-        rodGlowStyle = "filter: drop-shadow(0 0 5px #34d399);";
-        rodStrokeColor = "url(#rodTitaniumGrad)";
-        lineStrokeColor = "#34d399";
-        rodTipAura = `<circle cx="195" cy="45" r="4" fill="#34d399" opacity="0.7" />`;
-    } else {
-        rodStrokeColor = "url(#rodWoodGrad)";
-        lineStrokeColor = "rgba(255,255,255,0.7)";
-    }
+    // 1인칭 낚싯대 12종 고유 스킨 로드 (발광 오라, 색상, 릴, 가이드 링, 초릿대 오라)
+    let skin = ROD_SKINS[rodLevel] || ROD_SKINS[1];
+    let rodGlowStyle = skin.glow;
+    let rodStrokeColor = `url(#${skin.gradId})`;
+    let lineStrokeColor = skin.lineColor;
+    let rodTipAura = skin.tipAura;
 
     // 1인칭 원경 환경 데코레이션
     let ambientSceneryHtml = "";
@@ -1480,11 +1818,11 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
         if (lastCaught) {
             let color = (FISH_DATABASE.find(f => f.name === lastCaught.name) || {}).color || '#38bdf8';
             lastCatchPopup = `
-                <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.95); border: 2px solid ${color}; border-radius: 14px; padding: 10px 18px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.6); animation: fpFishLeapToCamera 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; z-index: 25; min-width: 180px;">
-                    <div style="font-size: 0.72rem; color: ${color}; font-weight: 900;">✨ 낚아올린 어종 획득!</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #fff; margin: 2px 0;">🐟 ${lastCaught.name}</div>
-                    <div style="font-size: 0.82rem; color: #cbd5e1;">크기: <b style="color: #38bdf8;">${lastCaught.displaySize || lastCaught.size + '자'}</b></div>
-                    <div style="font-size: 0.78rem; color: #facc15; font-weight: 800; margin-top: 2px;">가치: ${lastCaught.displayPrice || ''}</div>
+                <div style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 88%; max-width: 270px; box-sizing: border-box; background: rgba(15, 23, 42, 0.96); border: 2px solid ${color}; border-radius: 14px; padding: 8px 12px; text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.7); animation: fpFishLeapToCamera 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; z-index: 25;">
+                    <div style="font-size: 0.68rem; color: ${color}; font-weight: 900; letter-spacing: -0.2px;">✨ 낚아올린 어종 획득!</div>
+                    <div style="font-size: 1.15rem; font-weight: 900; color: #fff; margin: 1px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🐟 ${lastCaught.name}</div>
+                    <div style="font-size: 0.76rem; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">크기: <b style="color: #38bdf8;">${lastCaught.displaySize || lastCaught.size + '자'}</b></div>
+                    <div style="font-size: 0.74rem; color: #facc15; font-weight: 800; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">가치: ${lastCaught.displayPrice || ''}</div>
                 </div>
             `;
         }
@@ -1495,7 +1833,7 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
             <div style="position: absolute; top: 118px; left: 50%; transform: translateX(-50%); font-size: 1.35rem; opacity: 0.85; animation: fpBobberFloat 2.5s infinite;">
                 🔴
             </div>
-            <div style="position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); padding: 5px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap; z-index: 10;">
+            <div style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.65); padding: 5px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap; z-index: 10;">
                 🎣 [1인칭 시점] 낚싯대를 던져 손맛을 느껴보세요!
             </div>
         `;
@@ -1516,7 +1854,7 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
             </div>
 
             <!-- 상태 배지 -->
-            <div style="position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); background: rgba(2, 132, 199, 0.9); padding: 5px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 4px 14px rgba(0,0,0,0.4); white-space: nowrap; z-index: 10;">
+            <div style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); background: rgba(2, 132, 199, 0.9); padding: 5px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 4px 14px rgba(0,0,0,0.4); white-space: nowrap; z-index: 10;">
                 👀 찌를 주시하세요... 물고기가 다가오고 있습니다!
             </div>
         `;
@@ -1541,8 +1879,8 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
             </div>
 
             <!-- 1인칭 HIT 알림 배너 -->
-            <div style="position: absolute; top: 26px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; padding: 7px 22px; border-radius: 20px; font-size: 1.05rem; font-weight: 900; border: 2px solid #fecaca; box-shadow: 0 0 25px rgba(239,68,68,0.9); z-index: 30; animation: fpRodStrainShake 0.15s infinite; white-space: nowrap;">
-                🚨 HIT!! 지금 바로 낚아채세요!! (0.75초) 🚨
+            <div style="position: absolute; top: 26px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; padding: 7px 18px; border-radius: 20px; font-size: 0.95rem; font-weight: 900; border: 2px solid #fecaca; box-shadow: 0 0 25px rgba(239,68,68,0.9); z-index: 30; animation: fpRodStrainShake 0.15s infinite; white-space: nowrap;">
+                🚨 HIT!! 지금 바로 낚아채세요!! 🚨
             </div>
         `;
     }
@@ -1567,11 +1905,11 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
         <div style="position: relative; background: ${currentSpot.bgGradient}; border: 2px solid ${currentSpot.themeColor}; border-radius: 16px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 12px 30px rgba(0,0,0,0.28); color: white; ${stageShakeStyle}">
             
             <!-- 상단 낚시터 정보 바 -->
-            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.45); padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.15); font-size: 0.78rem; font-weight: 800; z-index: 10; position: relative;">
-                <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.45); padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.15); font-size: 0.78rem; font-weight: 800; z-index: 10; position: relative;">
+                <div style="display: flex; align-items: center; gap: 6px; white-space: nowrap;">
                     <span style="font-size: 1rem;">${currentSpot.icon}</span>
                     <span>${currentSpot.name}</span>
-                    <span style="background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.68rem;">1인칭 시점 🎥</span>
+                    <span style="background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;">${skin.theme} 🎣</span>
                 </div>
                 <div style="opacity: 0.85; font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;">${currentSpot.desc}</div>
             </div>
@@ -1593,56 +1931,28 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
                 <!-- 3. 1인칭 손 & 낚싯대 SVG 레이어 (우측 하단에서 화면 중앙 전방으로 뻗어나감) -->
                 <svg viewBox="0 0 380 240" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 8;">
                     <defs>
-                        <linearGradient id="rodWoodGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#fbbf24" />
-                            <stop offset="100%" stop-color="#78350f" />
-                        </linearGradient>
-                        <linearGradient id="rodTitaniumGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#34d399" />
-                            <stop offset="100%" stop-color="#0f766e" />
-                        </linearGradient>
-                        <linearGradient id="rodPoseidonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#38bdf8" />
-                            <stop offset="100%" stop-color="#1d4ed8" />
-                        </linearGradient>
-                        <linearGradient id="rodCosmicGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#c084fc" />
-                            <stop offset="100%" stop-color="#6b21a8" />
-                        </linearGradient>
-                        <linearGradient id="rodOmegaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#f43f5e" />
-                            <stop offset="50%" stop-color="#facc15" />
-                            <stop offset="100%" stop-color="#3b82f6" />
-                        </linearGradient>
-                        <radialGradient id="omegaTipGlow">
-                            <stop offset="0%" stop-color="#fff" />
-                            <stop offset="100%" stop-color="#f59e0b" />
-                        </radialGradient>
+                        ${Object.values(ROD_SKINS).map(s => s.gradDef).join('')}
                     </defs>
 
                     <!-- 1인칭 낚싯줄 (초릿대 -> 수면 찌) -->
-                    <path d="${linePathD}" fill="none" stroke="${lineStrokeColor}" stroke-width="${fishingStep === 'bite' ? '2.8' : '1.5'}" stroke-dasharray="${fishingStep === 'bite' ? 'none' : '3,2'}" />
+                    <path d="${linePathD}" fill="none" stroke="${skin.lineColor}" stroke-width="${fishingStep === 'bite' ? '3' : '1.8'}" stroke-dasharray="${fishingStep === 'bite' ? 'none' : skin.lineDash}" />
 
                     <!-- 1인칭 낚싯대 몸체 (우측 하단 손잡이 -> 중앙 전방 초릿대) -->
                     <g style="${rodMotionStyle} ${rodGlowStyle}">
                         <!-- 낚싯대 블랭크 (Rod Pole) -->
-                        <path d="${rodPathD}" fill="none" stroke="${rodStrokeColor}" stroke-width="7" stroke-linecap="round" />
-                        <path d="${rodPathD}" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2" stroke-linecap="round" />
+                        <path d="${rodPathD}" fill="none" stroke="url(#${skin.gradId})" stroke-width="${skin.width}" stroke-linecap="round" />
+                        <path d="${rodPathD}" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-linecap="round" />
 
                         <!-- 낚싯대 가이드 링 (Guide Rings) -->
-                        <circle cx="280" cy="165" r="4" fill="none" stroke="#e2e8f0" stroke-width="2" />
-                        <circle cx="235" cy="100" r="3" fill="none" stroke="#e2e8f0" stroke-width="1.8" />
-                        <circle cx="202" cy="55" r="2.2" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
+                        <circle cx="280" cy="165" r="4" fill="none" stroke="${skin.guidesColor}" stroke-width="${skin.guidesWidth}" />
+                        <circle cx="235" cy="100" r="3" fill="none" stroke="${skin.guidesColor}" stroke-width="${skin.guidesWidth * 0.85}" />
+                        <circle cx="202" cy="55" r="2.2" fill="none" stroke="${skin.guidesColor}" stroke-width="${skin.guidesWidth * 0.7}" />
 
-                        <!-- 낚싯대 끝 초릿대 오라 -->
+                        <!-- 낚싯대 끝 초릿대 오라 및 파티클 -->
                         ${rodTipAura}
 
-                        <!-- 스피닝 릴 (Reel) & 낚싯대 손잡이 -->
-                        <ellipse cx="325" cy="215" rx="14" ry="10" fill="#334155" stroke="#64748b" stroke-width="2" />
-                        <rect x="318" y="200" width="14" height="6" rx="2" fill="#94a3b8" />
-                        
-                        <!-- 1인칭 플레이어의 손/장갑 -->
-                        <path d="M 335 240 Q 345 220, 365 225 Q 380 240, 360 255 Z" fill="#475569" stroke="#1e293b" stroke-width="2" />
+                        <!-- 스피닝 릴 & 낚싯대 손잡이 -->
+                        ${skin.reelHtml}
                     </g>
                 </svg>
 
@@ -1651,8 +1961,8 @@ function renderAnimatedFishingStage(currentSpot, fishingStep, rodLevel, lastCaug
             </div>
 
             <!-- 하단 조작 액션 버튼 및 상태 텍스트 -->
-            <div style="background: rgba(15, 23, 42, 0.85); padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.15); text-align: center;">
-                <div id="fishingStatusText" style="font-size: 0.95rem; font-weight: 800; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.6); margin-bottom: 10px; line-height: 1.3;">
+            <div style="background: rgba(15, 23, 42, 0.85); padding: 12px 14px; border-top: 1px solid rgba(255,255,255,0.15); text-align: center;">
+                <div id="fishingStatusText" style="font-size: 0.92rem; font-weight: 800; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.6); margin-bottom: 8px; line-height: 1.35; word-break: keep-all;">
                     ${statusText}
                 </div>
                 ${actionBtnHtml}
@@ -1733,26 +2043,26 @@ async function renderFishingView(contentArea) {
     let isBankrupt = (fishingData.money < effectiveCost && !hasInventoryFish() && fishingStep === 'ready');
 
     if (isBankrupt) {
-        statusText = '소지금이 부족하여 낚시를 할 수 없습니다... 길냥이에게 물고기를 뺏어오세요!';
+        statusText = '소지금이 부족합니다. 길냥이에게 물고기를 뺏어오세요!';
         statusColor = '#d97706';
-        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900;">🐱 길냥이에게 낚싯대 1회 비용 뺏기 (기회)</button>`;
+        actionBtnHtml = `<button class="btn-primary" onclick="claimChance()" style="width: 100%; padding: 13px; font-size: 0.95rem; background: linear-gradient(135deg, #facc15, #eab308); color: #713f12; font-weight: 900; border-radius: 12px; word-break: keep-all;">🐱 길냥이에게 낚시 비용 뺏기 (구제 찬스)</button>`;
     } else {
         if (fishingStep === 'ready') {
             if (hasBahamut) {
-                statusText = '🌍 [바하무트의 지탱] 낚시 비용 무료 상태!';
-                actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0369a1, #0284c7, #0f172a); color: #f0f9ff; font-weight: 800; border: 1px solid #38bdf8;">🌟 바하무트의 신성한 낚싯대 던지기 (비용: 0원)</button>`;
+                statusText = '🌍 [바하무트의 지탱] 낚시 비용 무료!';
+                actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="width: 100%; padding: 14px; font-size: 1.05rem; background: linear-gradient(135deg, #0369a1, #0284c7, #0f172a); color: #f0f9ff; font-weight: 900; border: 1px solid #38bdf8; border-radius: 12px; word-break: keep-all; box-shadow: 0 4px 14px rgba(3,105,161,0.4);">🌟 바하무트 낚시 시작 (0원)</button>`;
             } else {
                 statusText = '광활한 낚시터에서 대어를 노려보세요!';
-                actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="padding: 16px; font-size: 1.1rem; background: linear-gradient(135deg, #0284c7, #0369a1);">🎣 낚싯대 던지기 (비용: ${currentRod.cost.toLocaleString()}원)</button>`;
+                actionBtnHtml = `<button class="btn-primary" onclick="startCast()" style="width: 100%; padding: 14px; font-size: 1.05rem; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; font-weight: 900; border-radius: 12px; word-break: keep-all; box-shadow: 0 4px 14px rgba(2,132,199,0.35);">🎣 낚싯대 던지기 (${formatMoneyKorean(currentRod.cost)})</button>`;
             }
         } else if (fishingStep === 'waiting') {
             let hasHippocampus = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('히포캠포스') && hippocampusAutoActive;
-            statusText = hasHippocampus ? '⚡ [히포캠포스] 나침반의 가속을 받아 대어를 낚아채는 중...' : '물고기가 미끼 주변을 서성이는 중...';
-            actionBtnHtml = `<button onclick="earlyClickAlert()" style="width: 100%; padding: 16px; background: #64748b; border: none; border-radius: 12px; color: white; font-size: 1.1rem; font-weight: 700; cursor: pointer;">대어 기다리는 중... (누르면 취소)</button>`;
+            statusText = hasHippocampus ? '⚡ [히포캠포스] 나침반 가속으로 대어를 낚아채는 중...' : '물고기가 미끼 주변을 서성이는 중...';
+            actionBtnHtml = `<button onclick="earlyClickAlert()" style="width: 100%; padding: 13px; background: #64748b; border: none; border-radius: 12px; color: white; font-size: 0.95rem; font-weight: 700; cursor: pointer; word-break: keep-all;">대어 기다리는 중... (누르면 취소)</button>`;
         } else if (fishingStep === 'bite') {
-            statusText = '지금이다! 0.75초 안에 잡으세요!!';
+            statusText = '지금이다! 0.75초 안에 낚아채세요!!';
             statusColor = '#dc2626';
-            actionBtnHtml = `<button onclick="hookFish()" style="width: 100%; padding: 24px; background: linear-gradient(135deg, #ef4444, #b91c1c); border: none; border-radius: 16px; color: white; font-size: 1.6rem; font-weight: 900; cursor: pointer;">⚡ 지금이니!!! ⚡</button>`;
+            actionBtnHtml = `<button onclick="hookFish()" style="width: 100%; padding: 18px; background: linear-gradient(135deg, #ef4444, #b91c1c); border: none; border-radius: 14px; color: white; font-size: 1.4rem; font-weight: 900; cursor: pointer; word-break: keep-all; box-shadow: 0 0 20px rgba(239,68,68,0.7); animation: fpRodStrainShake 0.15s infinite;">⚡ 지금 챔질하기!! ⚡</button>`;
         }
     }
 
@@ -2087,25 +2397,38 @@ async function renderFishingView(contentArea) {
                 </div>
             </div>
 
-            <!-- 해적 재화 요약 바 -->
-            <div style="display: flex; justify-content: space-around; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 10px; margin-bottom: 16px; font-size: 0.85rem; text-align: center;">
-                <div>
-                    <span style="color: #92400e; font-weight: 700;">🪙 은화 금고 (Lv.${fishingData.silver_coin_level || 0}):</span> <b style="color: #b45309;">${fishingData.silver_coins || 0}개</b>
+            <!-- 🪙 해적 재화 & 마카라 버프 요약 (모바일 반응형 그리드) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 16px;">
+                <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 8px 10px; text-align: center;">
+                    <div style="color: #92400e; font-weight: 700; font-size: 0.76rem;">🪙 은화 금고 (Lv.${fishingData.silver_coin_level || 0})</div>
+                    <div style="color: #b45309; font-weight: 900; font-size: 0.92rem; margin-top: 2px;">${(fishingData.silver_coins || 0).toLocaleString()}개</div>
                 </div>
-                <div>
-                    <span style="color: #166534; font-weight: 700;">🧭 나침반 (Lv.${fishingData.compass_level || 0}/${MAX_COMPASS_LEVEL}):</span> <b style="color: #15803d;">${fishingData.compass_fragments || 0}개</b>
+                <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; padding: 8px 10px; text-align: center;">
+                    <div style="color: #166534; font-weight: 700; font-size: 0.76rem;">🧭 나침반 (Lv.${fishingData.compass_level || 0}/${MAX_COMPASS_LEVEL})</div>
+                    <div style="color: #15803d; font-weight: 900; font-size: 0.92rem; margin-top: 2px;">${(fishingData.compass_fragments || 0).toLocaleString()}개</div>
                 </div>
+                ${hasMakara ? `
+                <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 8px 10px; text-align: center; grid-column: span 2;">
+                    <span style="color: #047857; font-weight: 700; font-size: 0.76rem;">🌊 마카라 신화 부스터:</span> 
+                    <b style="color: #065f46; font-size: 0.9rem; margin-left: 4px;">+${(fishingData.makara_bonus_chance || 0).toFixed(2)}%</b>
+                    ${fishingData.rod_level >= 11 ? `<span style="color: #047857; font-weight: 800; font-size: 0.76rem; margin-left: 6px;">(태초 +${(fishingData.makara_primordial_bonus || 0).toFixed(2)}%)</span>` : ''}
+                </div>
+                ` : ''}
             </div>
-
-            ${makaraBoosterHtml}
 
             <!-- 🎮 실시간 그래픽 낚시 시뮬레이션 스테이지 -->
             ${renderAnimatedFishingStage(currentSpot, fishingStep, fishingData.rod_level, lastCaughtResult, currentRod, statusText, actionBtnHtml)}
 
+            <!-- 낚싯대 업그레이드 버튼 -->
             <div style="margin-bottom: 20px;">
                 ${nextRod ? `
-                <button class="btn-primary" onclick="upgradeRod()" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 12px;">⬆️ 낚시대 업그레이드 (${nextRod.name} - ${nextRod.price.toLocaleString()}원)</button>
-                ` : `<div style="text-align: center; font-size: 0.85rem; font-weight: 700; color: #7c3aed;">👑 태초의 창조주 만렙 궁극의 낚시대를 보유하고 있습니다!</div>`}
+                <button class="btn-primary" onclick="upgradeRod()" style="width: 100%; background: linear-gradient(135deg, #7c3aed, #6d28d9); padding: 12px 14px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 4px 14px rgba(124,58,237,0.35);">
+                    <div style="font-weight: 900; font-size: 1rem; color: #ffffff;">⬆️ 낚시대 업그레이드</div>
+                    <div style="font-size: 0.8rem; color: #e9d5ff; font-weight: 700; word-break: keep-all;">
+                        [${fishingData.rod_level + 1}단계] ${nextRod.name} · 비용: ${formatMoneyKorean(nextRod.price)}
+                    </div>
+                </button>
+                ` : `<div style="text-align: center; font-size: 0.85rem; font-weight: 700; color: #7c3aed; padding: 10px; background: #f5f3ff; border-radius: 10px; border: 1px solid #ddd6fe;">👑 태초의 창조주 만렙 궁극의 낚시대를 보유하고 있습니다!</div>`}
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
@@ -2317,10 +2640,10 @@ function selectFishFromPool(pool) {
 }
 
 function executeCatchLogic() {
-    // 1. 영물 무작위 랜덤 획득 (단일 롤 & 미해금 영물 중 균등 무작위 선정)
+    // 1. 영물 무작위 랜덤 획득 (단일 롤 & 미해금 영물 중 균등 무작위 선정 - 0.05% 확률)
     let unobtainedBeasts = MYTHICAL_BEASTS.filter(b => !fishingData.unlocked_beasts.includes(b.name));
     if (unobtainedBeasts.length > 0) {
-        if (Math.random() * 100 < 0.1) { // 0.1% 확률
+        if (Math.random() * 100 < 0.05) { // 0.05% 확률 (1/2,000)
             let randomIndex = Math.floor(Math.random() * unobtainedBeasts.length);
             let beast = unobtainedBeasts[randomIndex];
             if (!fishingData.unlocked_beasts) fishingData.unlocked_beasts = [];
