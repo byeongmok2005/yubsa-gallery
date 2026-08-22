@@ -1111,11 +1111,30 @@ function startTradePolling() {
 
         const { data: myRow } = await supabaseClient
             .from('user_fishing_data')
-            .select('fish_inventory, trade_request')
+            .select('fish_inventory, trade_request, unlocked_beasts')
             .eq('nickname', currentUser)
             .maybeSingle();
 
         if (myRow) {
+            // DB에 새로 추가된 영물이 있으면 로컬 클라이언트에 실시간 자동 동기화
+            if (Array.isArray(myRow.unlocked_beasts)) {
+                let updatedBeast = false;
+                if (!fishingData.unlocked_beasts) fishingData.unlocked_beasts = [];
+                for (let b of myRow.unlocked_beasts) {
+                    if (!fishingData.unlocked_beasts.includes(b)) {
+                        fishingData.unlocked_beasts.push(b);
+                        updatedBeast = true;
+                    }
+                }
+                if (updatedBeast) {
+                    try {
+                        localStorage.setItem(`yubsa_fishing_backup_${currentUser}`, JSON.stringify(fishingData));
+                    } catch (e) {}
+                    let contentArea = document.getElementById("contentArea");
+                    if (contentArea) renderFishingView(contentArea);
+                }
+            }
+
             if (hasDagon) {
                 let remoteInvStr = JSON.stringify(myRow.fish_inventory || {});
                 let localInvStr = JSON.stringify(fishingData.fish_inventory || {});
