@@ -889,11 +889,43 @@ async function initFishing() {
     let savedHippocampus = localStorage.getItem(`hippocampus_auto_${currentUser}`);
     hippocampusAutoActive = savedHippocampus !== null ? JSON.parse(savedHippocampus) : true;
 
-    const { data } = await supabaseClient
-        .from('user_fishing_data')
-        .select('*')
-        .eq('nickname', currentUser)
-        .maybeSingle();
+    let data = null;
+    let fetchError = null;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const res = await supabaseClient
+                .from('user_fishing_data')
+                .select('*')
+                .eq('nickname', currentUser)
+                .maybeSingle();
+            if (res.data) {
+                data = res.data;
+                break;
+            }
+            if (res.error) {
+                fetchError = res.error;
+            }
+        } catch (err) {
+            fetchError = err;
+        }
+        if (!data && attempt < 2) {
+            await new Promise(r => setTimeout(r, 400));
+        }
+    }
+
+    // 로컬 세이프가드 백업 확인
+    let localBackup = null;
+    try {
+        let rawLocal = localStorage.getItem(`yubsa_fishing_backup_${currentUser}`);
+        if (rawLocal) localBackup = JSON.parse(rawLocal);
+    } catch (e) {}
+
+    // DB 로딩에 실패하거나 누락되었을 때 로컬 백업이 더 상위 단계면 안전하게 복원
+    if (!data && localBackup && (localBackup.rod_level || 1) >= 1) {
+        console.warn("⚠️ [Fail-Safe] DB 로딩 일시 지연/네트워크 순단 감지: 로컬 세이프가드 백업 데이터를 활성화합니다.");
+        data = localBackup;
+    }
 
     if (data) {
         let sanitized = validateAndSanitizeFishingData(data);
@@ -951,11 +983,15 @@ async function initFishing() {
             compass_level: sanitized.compass_level !== undefined ? sanitized.compass_level : 0
         };
 
+        try {
+            localStorage.setItem(`yubsa_fishing_backup_${currentUser}`, JSON.stringify(fishingData));
+        } catch (e) {}
+
         if (wasContaminated) {
             console.warn("🛡️ [Anti-Cheat] 오염된 변조 데이터를 감지하여 정상치로 복구 후 DB를 자동 정화합니다.");
             await saveFishingData();
         }
-    } else {
+    } else if (!fetchError) {
         await supabaseClient.from('user_fishing_data').insert([{
             nickname: currentUser,
             money: 1000,
@@ -976,6 +1012,11 @@ async function initFishing() {
             compass_level: 0
         }]);
         fishingData = { money: 1000, rod_level: 1, current_spot: '연못', fish_records: {}, fish_inventory: {}, unlocked_beasts: [], cursed_target: currentUser, curse_remaining_count: 0, makara_bonus_chance: 0, makara_primordial_bonus: 0, siren_streak: 0, dagon_partner: null, is_dagon_mutual: false, trade_request: null, silver_coins: 0, silver_coin_level: 0, compass_fragments: 0, compass_level: 0 };
+        try {
+            localStorage.setItem(`yubsa_fishing_backup_${currentUser}`, JSON.stringify(fishingData));
+        } catch (e) {}
+    } else {
+        console.error("⚠️ [Fail-Safe] 일시적 네트워크 지연으로 데이터를 로드하지 못했습니다. 기존 데이터 보존을 위해 1단계 리셋을 차단합니다.");
     }
 
     await checkDagonMutualStatus();
@@ -990,6 +1031,9 @@ async function saveFishingData() {
     validateAndSanitizeFishingData(fishingData);
 
     localStorage.setItem(`yubsa_spot_${currentUser}`, fishingData.current_spot || '연못');
+    try {
+        localStorage.setItem(`yubsa_fishing_backup_${currentUser}`, JSON.stringify(fishingData));
+    } catch (e) {}
 
     let cleanInventory = {};
     if (fishingData.fish_inventory) {
