@@ -889,15 +889,48 @@ async function initFishing() {
     let savedHippocampus = localStorage.getItem(`hippocampus_auto_${currentUser}`);
     hippocampusAutoActive = savedHippocampus !== null ? JSON.parse(savedHippocampus) : true;
 
-    const { data } = await supabaseClient
+    let dataToUse = null;
+
+    const { data: currentData } = await supabaseClient
         .from('user_fishing_data')
         .select('*')
         .eq('nickname', currentUser)
         .maybeSingle();
 
-    if (data) {
-        let sanitized = validateAndSanitizeFishingData(data);
-        let wasContaminated = (data.money !== sanitized.money) || (data.silver_coins !== sanitized.silver_coins) || (data.compass_level !== sanitized.compass_level);
+    let legacyNick = null;
+    if (currentUser === '이승욱') legacyNick = 'sdcard';
+    else if (currentUser === '유진호') legacyNick = 'jin';
+
+    let legacyData = null;
+    if (legacyNick) {
+        const { data: legData } = await supabaseClient
+            .from('user_fishing_data')
+            .select('*')
+            .eq('nickname', legacyNick)
+            .maybeSingle();
+        legacyData = legData;
+    }
+
+    if (legacyData) {
+        let shouldRestore = !currentData || 
+            (legacyData.rod_level > (currentData.rod_level || 1)) || 
+            (Object.keys(legacyData.fish_records || {}).length > Object.keys(currentData.fish_records || {}).length) || 
+            (legacyData.money > (currentData.money || 1000));
+
+        if (shouldRestore) {
+            console.log(`🎣 [자동 복구] ${legacyNick} 님의 기존 낚시 데이터를 ${currentUser} 님에게 완벽 복구합니다!`);
+            dataToUse = { ...legacyData, nickname: currentUser };
+            await supabaseClient.from('user_fishing_data').upsert([{ ...dataToUse, updated_at: new Date() }], { onConflict: 'nickname' });
+        } else {
+            dataToUse = currentData;
+        }
+    } else {
+        dataToUse = currentData;
+    }
+
+    if (dataToUse) {
+        let sanitized = validateAndSanitizeFishingData(dataToUse);
+        let wasContaminated = (dataToUse.money !== sanitized.money) || (dataToUse.silver_coins !== sanitized.silver_coins) || (dataToUse.compass_level !== sanitized.compass_level);
 
         let savedSpot = localStorage.getItem(`yubsa_spot_${currentUser}`) || '연못';
         if (!FISHING_SPOTS[savedSpot]) savedSpot = '연못';

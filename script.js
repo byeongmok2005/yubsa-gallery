@@ -294,8 +294,42 @@ async function cleanupLegacyNicknames() {
 
         await supabaseClient.from('dms').update({ sender: '이승욱' }).eq('sender', 'sdcard');
         await supabaseClient.from('dms').update({ sender: '유진호' }).eq('sender', 'jin');
+
+        // 🎣 [낚시 데이터 복구 및 마이그레이션 (sdcard -> 이승욱, jin -> 유진호)]
+        const legacyPairs = [
+            { legacy: 'sdcard', current: '이승욱' },
+            { legacy: 'jin', current: '유진호' }
+        ];
+
+        for (let pair of legacyPairs) {
+            const { data: legacyFishing } = await supabaseClient
+                .from('user_fishing_data')
+                .select('*')
+                .eq('nickname', pair.legacy)
+                .maybeSingle();
+
+            if (legacyFishing) {
+                const { data: currentFishing } = await supabaseClient
+                    .from('user_fishing_data')
+                    .select('*')
+                    .eq('nickname', pair.current)
+                    .maybeSingle();
+
+                let shouldCopy = !currentFishing || 
+                    (legacyFishing.rod_level > (currentFishing.rod_level || 1)) || 
+                    (Object.keys(legacyFishing.fish_records || {}).length > Object.keys(currentFishing.fish_records || {}).length) ||
+                    (legacyFishing.money > (currentFishing.money || 1000));
+
+                if (shouldCopy) {
+                    let restoreData = { ...legacyFishing, nickname: pair.current, updated_at: new Date() };
+                    delete restoreData.id;
+                    await supabaseClient.from('user_fishing_data').upsert([restoreData], { onConflict: 'nickname' });
+                    console.log(`🎣 [복구 완료] ${pair.legacy} -> ${pair.current} 낚시 데이터 복구 성공`);
+                }
+            }
+        }
     } catch (e) {
-        console.warn("레거시 닉네임 정리 중 예외:", e);
+        console.warn("레거시 닉네임 정리 및 낚시 데이터 복구 중 예외:", e);
     }
 }
 
