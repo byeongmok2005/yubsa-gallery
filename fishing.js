@@ -92,7 +92,7 @@ let tradePollingInterval = null;
 let biteTimeout = null;
 let biteTimer = null; 
 let floatingAlertText = ""; 
-let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용']; 
+let playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용', '유진호']; 
 let bahamutAutoActive = true; 
 let hippocampusAutoActive = true; 
 let recentCaughtFishHistory = []; // 같은 물고기 연속 중복 방지 버퍼
@@ -1425,7 +1425,7 @@ function openDagonContractModal() {
     closeAllModals();
 
     if (!playerList || playerList.length === 0) {
-        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용'];
+        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용', '유진호'];
     }
 
     let currentPartner = fishingData.dagon_partner;
@@ -1518,7 +1518,7 @@ function openTradeModal() {
     closeAllModals();
 
     if (!playerList || playerList.length === 0) {
-        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용'];
+        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용', '유진호'];
     }
 
     let contentHtml = "";
@@ -2231,7 +2231,7 @@ function openCurseManager() {
     }
     closeAllModals();
     if (!playerList || playerList.length === 0) {
-        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용'];
+        playerList = ['실험체', '박병목', '김철수', '장민준', '손승환', '이승욱', '김병수', '김태용', '유진호'];
     }
     let currentTarget = fishingData.cursed_target || currentUser;
     let playerOptionsHtml = playerList.map(p => `<option value="${p}" ${p === currentTarget ? 'selected' : ''}>${p}</option>`).join('');

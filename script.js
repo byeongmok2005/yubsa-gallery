@@ -52,12 +52,17 @@ async function getVerifiedSessionUser() {
 }
 
 async function initApp() {
+    await cleanupLegacyNicknames();
+
     const { data: { session } } = await supabaseClient.auth.getSession();
     
     if (session && session.user) {
         const userMeta = session.user.user_metadata;
         currentUser = cleanName(userMeta && userMeta.nickname ? userMeta.nickname : session.user.email.split('@')[0]);
         localStorage.setItem('yubsa_user', currentUser);
+        if (currentUser) {
+            await supabaseClient.from('users').upsert([{ nickname: currentUser }], { onConflict: 'nickname' });
+        }
     } else {
         currentUser = "";
         localStorage.removeItem('yubsa_user');
@@ -249,25 +254,61 @@ function navigateTo(view) {
     renderMainContent();
 }
 
+const NICKNAME_ALIASES = {
+    'sdcard': '이승욱',
+    'jin': '유진호',
+    'sdcard@friend.com': '이승욱',
+    'jin@friend.com': '유진호'
+};
+
 function cleanName(name) {
     if (!name) return "";
     let cleaned = name.replace(/[\[\]{}""''`]/g, '').trim();
+    if (NICKNAME_ALIASES[cleaned]) {
+        return NICKNAME_ALIASES[cleaned];
+    }
+    if (NICKNAME_ALIASES[cleaned.toLowerCase()]) {
+        return NICKNAME_ALIASES[cleaned.toLowerCase()];
+    }
     if (/^[가-힣a-zA-Z0-9]+$/.test(cleaned)) {
         return cleaned;
     }
     return "";
 }
 
+async function cleanupLegacyNicknames() {
+    try {
+        await supabaseClient.from('users').delete().in('nickname', ['sdcard', 'jin', 'SDCARD', 'JIN']);
+        await supabaseClient.from('users').upsert([
+            { nickname: '이승욱' },
+            { nickname: '유진호' }
+        ], { onConflict: 'nickname' });
+
+        await supabaseClient.from('photos').update({ uploader: '이승욱' }).eq('uploader', 'sdcard');
+        await supabaseClient.from('photos').update({ uploader: '유진호' }).eq('uploader', 'jin');
+
+        await supabaseClient.from('comments').update({ author: '이승욱' }).eq('author', 'sdcard');
+        await supabaseClient.from('comments').update({ author: '유진호' }).eq('author', 'jin');
+        await supabaseClient.from('replies').update({ author: '이승욱' }).eq('author', 'sdcard');
+        await supabaseClient.from('replies').update({ author: '유진호' }).eq('author', 'jin');
+
+        await supabaseClient.from('dms').update({ sender: '이승욱' }).eq('sender', 'sdcard');
+        await supabaseClient.from('dms').update({ sender: '유진호' }).eq('sender', 'jin');
+    } catch (e) {
+        console.warn("레거시 닉네임 정리 중 예외:", e);
+    }
+}
+
 async function fetchMembers() {
     let set = new Set();
-    ['박병목', '김병수', '김태용', '장민준'].forEach(m => set.add(m));
+    ['박병목', '김병수', '김태용', '장민준', '이승욱', '유진호'].forEach(m => set.add(m));
     if (currentUser) set.add(currentUser);
 
     const { data: userData } = await supabaseClient.from('users').select('nickname');
     if (userData) {
         userData.forEach(u => {
             let name = cleanName(u.nickname);
-            if (name) set.add(name);
+            if (name && name !== 'sdcard' && name !== 'jin') set.add(name);
         });
     }
 
@@ -283,16 +324,22 @@ async function fetchMembers() {
                 if (Array.isArray(targets)) {
                     targets.forEach(t => {
                         let name = cleanName(t);
-                        if (name) set.add(name);
+                        if (name && name !== 'sdcard' && name !== 'jin') set.add(name);
                     });
                 }
             }
             if (p.uploader) {
                 let name = cleanName(p.uploader);
-                if (name) set.add(name);
+                if (name && name !== 'sdcard' && name !== 'jin') set.add(name);
             }
         });
     }
+
+    set.delete('sdcard');
+    set.delete('jin');
+    set.delete('SDCARD');
+    set.delete('JIN');
+
     members = Array.from(set);
 }
 
