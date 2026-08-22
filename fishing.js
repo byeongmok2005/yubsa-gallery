@@ -1079,7 +1079,6 @@ function startTradePolling() {
                     fishingData.fish_inventory = myRow.fish_inventory || {};
                     let contentArea = document.getElementById("contentArea");
                     if (contentArea) renderFishingView(contentArea);
-                    showFloatingAlert("📜 [상호 다곤 계약] 파트너와 물고기가 실시간 공유되었습니다!");
                 }
             }
 
