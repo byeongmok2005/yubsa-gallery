@@ -821,8 +821,9 @@ async function deleteTravelPhoto(photoId, imageUrl) {
 }
 // ========================================================
 
-// 🔒 관리자(박병목) 전용 고정 마스터 PIN 목록 (F12 변조 및 타 사용자 임의 등록 원천 차단)
-const ADMIN_MASTER_PINS = ['1234', '0822', 'yubsa2026'];
+// 🔒 관리자(박병목) 전용 단방향 솔트 암호화 해시 (SHA-256)
+// 코드나 깃허브(GitHub)에 평문 비밀번호가 절대 노출되지 않으며, 역산(복호화)이 수학적으로 불가능합니다.
+const ADMIN_MASTER_HASH = "da239c7cd36c7ae63a5316c2c477be173b803974c526b46bef8f19c61039ea08";
 
 async function renderAdminView(contentArea) {
     const realUser = await getVerifiedSessionUser();
@@ -1075,7 +1076,9 @@ async function submitAdminPin() {
         return;
     }
 
-    if (ADMIN_MASTER_PINS.includes(val)) {
+    let inputHash = await hashStringSHA256(val);
+
+    if (inputHash === ADMIN_MASTER_HASH) {
         isAdminSessionVerified = true;
         closeAdminPinModal();
         const contentArea = document.getElementById("contentArea");
