@@ -897,18 +897,21 @@ async function initFishing() {
         .eq('nickname', currentUser)
         .maybeSingle();
 
-    let legacyNick = null;
-    if (currentUser === '이승욱') legacyNick = 'sdcard';
-    else if (currentUser === '유진호') legacyNick = 'jin';
+    let legacyNicks = [];
+    if (currentUser === '이승욱') legacyNicks = ['SDCARD', 'sdcard'];
+    else if (currentUser === '유진호') legacyNicks = ['JIN', 'jin'];
 
     let legacyData = null;
-    if (legacyNick) {
+    for (let lNick of legacyNicks) {
         const { data: legData } = await supabaseClient
             .from('user_fishing_data')
             .select('*')
-            .eq('nickname', legacyNick)
+            .eq('nickname', lNick)
             .maybeSingle();
-        legacyData = legData;
+        if (legData) {
+            legacyData = legData;
+            break;
+        }
     }
 
     if (legacyData) {
