@@ -511,9 +511,9 @@ const FISH_DATABASE = [
     { name: '대왕 황소개구리', grade: '영웅', spots: ['연못'], minSize: 2.0, maxSize: 4.0, basePrice: 11000, color: '#2563eb' },
     { name: '연꽃 자라', grade: '영웅', spots: ['연못'], minSize: 2.0, maxSize: 4.5, basePrice: 15000, color: '#2563eb' },
     { name: '거대 가물치(연못왕)', grade: '영웅', spots: ['연못'], minSize: 2.5, maxSize: 5.5, basePrice: 18000, color: '#2563eb' },
-    { name: '천년 묵은 남생이', grade: '전설', spots: ['연못'], minSize: 8.0, maxSize: 18.0, basePrice: 180000, color: '#9333ea' },
-    { name: '연못의 수호룡 이무기', grade: '전설', spots: ['연못'], minSize: 12.0, maxSize: 25.0, basePrice: 250000, color: '#9333ea' },
-    { name: '옥황상제의 연꽃 백련어', grade: '신화', spots: ['연못'], minSize: 30.0, maxSize: 70.0, basePrice: 2800000, color: '#ea580c' },
+    { name: '천년 묵은 남생이', grade: '전설', spots: ['연못'], minSize: 8.0, maxSize: 18.0, basePrice: 9000000, color: '#9333ea' },
+    { name: '연못의 수호룡 이무기', grade: '전설', spots: ['연못'], minSize: 12.0, maxSize: 25.0, basePrice: 12500000, color: '#9333ea' },
+    { name: '옥황상제의 연꽃 백련어', grade: '신화', spots: ['연못'], minSize: 30.0, maxSize: 70.0, basePrice: 140000000, color: '#ea580c' },
 
     // ================= [2. 🏞️ 계곡 (Valley) 서식 생물] =================
     { name: '버들치', grade: '일반', spots: ['계곡'], minSize: 0.3, maxSize: 0.7, basePrice: 560, color: '#64748b' },
@@ -537,9 +537,9 @@ const FISH_DATABASE = [
     { name: '황금 꺽지', grade: '영웅', spots: ['계곡'], minSize: 2.2, maxSize: 4.8, basePrice: 15000, color: '#2563eb' },
     { name: '산골짝 거대 도롱뇽', grade: '영웅', spots: ['계곡'], minSize: 2.5, maxSize: 5.5, basePrice: 16000, color: '#2563eb' },
     { name: '심산유곡 은어 떼', grade: '영웅', spots: ['계곡'], minSize: 2.5, maxSize: 5.0, basePrice: 14000, color: '#2563eb' },
-    { name: '영험한 백색 열목어', grade: '전설', spots: ['계곡'], minSize: 10.0, maxSize: 22.0, basePrice: 200000, color: '#9333ea' },
-    { name: '계곡의 지배자 괴물 쏘가리', grade: '전설', spots: ['계곡'], minSize: 12.0, maxSize: 25.0, basePrice: 260000, color: '#9333ea' },
-    { name: '계곡의 정령 청룡어', grade: '신화', spots: ['계곡'], minSize: 40.0, maxSize: 90.0, basePrice: 3500000, color: '#ea580c' },
+    { name: '영험한 백색 열목어', grade: '전설', spots: ['계곡'], minSize: 10.0, maxSize: 22.0, basePrice: 10000000, color: '#9333ea' },
+    { name: '계곡의 지배자 괴물 쏘가리', grade: '전설', spots: ['계곡'], minSize: 12.0, maxSize: 25.0, basePrice: 13000000, color: '#9333ea' },
+    { name: '계곡의 정령 청룡어', grade: '신화', spots: ['계곡'], minSize: 40.0, maxSize: 90.0, basePrice: 175000000, color: '#ea580c' },
 
     // ================= [3. 🌾 저수지 (Reservoir) 서식 생물] =================
     { name: '큰입배스', grade: '일반', spots: ['저수지'], minSize: 0.6, maxSize: 1.3, basePrice: 720, color: '#64748b' },
@@ -563,10 +563,10 @@ const FISH_DATABASE = [
     { name: '1미터 거대 가물치', grade: '영웅', spots: ['저수지'], minSize: 3.0, maxSize: 6.5, basePrice: 19000, color: '#2563eb' },
     { name: '백색 민물장어', grade: '영웅', spots: ['저수지'], minSize: 3.0, maxSize: 6.0, basePrice: 22000, color: '#2563eb' },
     { name: '저수지 괴물 메기', grade: '영웅', spots: ['저수지'], minSize: 3.5, maxSize: 7.0, basePrice: 20000, color: '#2563eb' },
-    { name: '안개 저수지 괴담어', grade: '전설', spots: ['저수지'], minSize: 12.0, maxSize: 28.0, basePrice: 240000, color: '#9333ea' },
-    { name: '백년 묵은 거대 자라왕', grade: '전설', spots: ['저수지'], minSize: 15.0, maxSize: 32.0, basePrice: 280000, color: '#9333ea' },
-    { name: '안개속 거대 철갑상어', grade: '전설', spots: ['저수지'], minSize: 16.0, maxSize: 35.0, basePrice: 320000, color: '#9333ea' },
-    { name: '안개 저수지의 수룡(水龍)', grade: '신화', spots: ['저수지'], minSize: 50.0, maxSize: 120.0, basePrice: 4800000, color: '#ea580c' },
+    { name: '안개 저수지 괴담어', grade: '전설', spots: ['저수지'], minSize: 12.0, maxSize: 28.0, basePrice: 12000000, color: '#9333ea' },
+    { name: '백년 묵은 거대 자라왕', grade: '전설', spots: ['저수지'], minSize: 15.0, maxSize: 32.0, basePrice: 14000000, color: '#9333ea' },
+    { name: '안개속 거대 철갑상어', grade: '전설', spots: ['저수지'], minSize: 16.0, maxSize: 35.0, basePrice: 16000000, color: '#9333ea' },
+    { name: '안개 저수지의 수룡(水龍)', grade: '신화', spots: ['저수지'], minSize: 50.0, maxSize: 120.0, basePrice: 240000000, color: '#ea580c' },
 
     // ================= [4. 🦀 갯벌 (Mudflat) 서식 생물] =================
     { name: '짱뚱어', grade: '일반', spots: ['갯벌'], minSize: 0.4, maxSize: 0.9, basePrice: 650, color: '#64748b' },
@@ -590,9 +590,9 @@ const FISH_DATABASE = [
     { name: '황금 짱뚱어', grade: '영웅', spots: ['갯벌'], minSize: 2.0, maxSize: 4.5, basePrice: 13000, color: '#2563eb' },
     { name: '거대 뻘 붕장어', grade: '영웅', spots: ['갯벌'], minSize: 2.8, maxSize: 6.0, basePrice: 18000, color: '#2563eb' },
     { name: '칠게 군주', grade: '영웅', spots: ['갯벌'], minSize: 2.2, maxSize: 4.8, basePrice: 15000, color: '#2563eb' },
-    { name: '갯벌의 지배자 대왕 갯지렁이', grade: '전설', spots: ['갯벌'], minSize: 10.0, maxSize: 25.0, basePrice: 200000, color: '#9333ea' },
-    { name: '천년 묵은 대왕 참소라', grade: '전설', spots: ['갯벌'], minSize: 12.0, maxSize: 26.0, basePrice: 250000, color: '#9333ea' },
-    { name: '조수간만의 군주 뻘크라켄', grade: '신화', spots: ['갯벌'], minSize: 45.0, maxSize: 110.0, basePrice: 4200000, color: '#ea580c' },
+    { name: '갯벌의 지배자 대왕 갯지렁이', grade: '전설', spots: ['갯벌'], minSize: 10.0, maxSize: 25.0, basePrice: 10000000, color: '#9333ea' },
+    { name: '천년 묵은 대왕 참소라', grade: '전설', spots: ['갯벌'], minSize: 12.0, maxSize: 26.0, basePrice: 12500000, color: '#9333ea' },
+    { name: '조수간만의 군주 뻘크라켄', grade: '신화', spots: ['갯벌'], minSize: 45.0, maxSize: 110.0, basePrice: 210000000, color: '#ea580c' },
 
     // ================= [5. 🌊 바다 (Sea / Coast) 서식 생물] =================
     { name: '참고등어', grade: '일반', spots: ['바다'], minSize: 0.6, maxSize: 1.2, basePrice: 700, color: '#64748b' },
@@ -623,12 +623,12 @@ const FISH_DATABASE = [
     { name: '흑기흉상어', grade: '영웅', spots: ['바다'], minSize: 3.5, maxSize: 7.5, basePrice: 22000, color: '#2563eb' },
     { name: '귀상어', grade: '영웅', spots: ['바다'], minSize: 4.0, maxSize: 8.5, basePrice: 24500, color: '#2563eb' },
     { name: '달맞이 개복치', grade: '영웅', spots: ['바다'], minSize: 3.0, maxSize: 7.0, basePrice: 20000, color: '#2563eb' },
-    { name: '심해 대왕오징어', grade: '전설', spots: ['바다'], minSize: 12.0, maxSize: 26.0, basePrice: 300000, color: '#9333ea' },
-    { name: '거대 백상아리', grade: '전설', spots: ['바다'], minSize: 15.0, maxSize: 32.0, basePrice: 360000, color: '#9333ea' },
-    { name: '바다의 포식자 범고래', grade: '전설', spots: ['바다'], minSize: 16.0, maxSize: 35.0, basePrice: 390000, color: '#9333ea' },
-    { name: '전설의 산갈치', grade: '전설', spots: ['바다'], minSize: 12.0, maxSize: 28.0, basePrice: 310000, color: '#9333ea' },
-    { name: '심해 패왕 메갈로돈', grade: '신화', spots: ['바다'], minSize: 40.0, maxSize: 90.0, basePrice: 6000000, color: '#ea580c' },
-    { name: '전설의 바다괴수 크라켄', grade: '신화', spots: ['바다'], minSize: 60.0, maxSize: 140.0, basePrice: 8500000, color: '#dc2626' },
+    { name: '심해 대왕오징어', grade: '전설', spots: ['바다'], minSize: 12.0, maxSize: 26.0, basePrice: 15000000, color: '#9333ea' },
+    { name: '거대 백상아리', grade: '전설', spots: ['바다'], minSize: 15.0, maxSize: 32.0, basePrice: 18000000, color: '#9333ea' },
+    { name: '바다의 포식자 범고래', grade: '전설', spots: ['바다'], minSize: 16.0, maxSize: 35.0, basePrice: 19500000, color: '#9333ea' },
+    { name: '전설의 산갈치', grade: '전설', spots: ['바다'], minSize: 12.0, maxSize: 28.0, basePrice: 15500000, color: '#9333ea' },
+    { name: '심해 패왕 메갈로돈', grade: '신화', spots: ['바다'], minSize: 40.0, maxSize: 90.0, basePrice: 300000000, color: '#ea580c' },
+    { name: '전설의 바다괴수 크라켄', grade: '신화', spots: ['바다'], minSize: 60.0, maxSize: 140.0, basePrice: 425000000, color: '#dc2626' },
 
     // ================= [6. 🌌 깊은바다 (Deep Sea) 서식 생물] =================
     { name: '심해 랜턴피시', grade: '일반', spots: ['깊은바다'], minSize: 0.3, maxSize: 0.7, basePrice: 680, color: '#64748b' },
@@ -648,11 +648,11 @@ const FISH_DATABASE = [
     { name: '마귀상어(고블린 샤크)', grade: '영웅', spots: ['깊은바다'], minSize: 3.2, maxSize: 7.0, basePrice: 23000, color: '#2563eb' },
     { name: '메가마우스 상어', grade: '영웅', spots: ['깊은바다'], minSize: 3.5, maxSize: 7.5, basePrice: 25000, color: '#2563eb' },
     { name: '초거대 바티노무스 킹', grade: '영웅', spots: ['깊은바다'], minSize: 2.5, maxSize: 5.5, basePrice: 20000, color: '#2563eb' },
-    { name: '심해 거대 흡혈오징어 킹', grade: '전설', spots: ['깊은바다'], minSize: 10.0, maxSize: 24.0, basePrice: 320000, color: '#9333ea' },
-    { name: '고대어 실러캔스', grade: '전설', spots: ['깊은바다'], minSize: 12.0, maxSize: 26.0, basePrice: 350000, color: '#9333ea' },
-    { name: '심해의 제왕 향고래', grade: '전설', spots: ['깊은바다'], minSize: 20.0, maxSize: 45.0, basePrice: 430000, color: '#9333ea' },
-    { name: '고대 심해 군주 레비아탄', grade: '신화', spots: ['깊은바다'], minSize: 60.0, maxSize: 150.0, basePrice: 9000000, color: '#b91c1c' },
-    { name: '심해의 신 요르문간드', grade: '신화', spots: ['깊은바다'], minSize: 80.0, maxSize: 180.0, basePrice: 13000000, color: '#450a0a' },
+    { name: '심해 거대 흡혈오징어 킹', grade: '전설', spots: ['깊은바다'], minSize: 10.0, maxSize: 24.0, basePrice: 16000000, color: '#9333ea' },
+    { name: '고대어 실러캔스', grade: '전설', spots: ['깊은바다'], minSize: 12.0, maxSize: 26.0, basePrice: 17500000, color: '#9333ea' },
+    { name: '심해의 제왕 향고래', grade: '전설', spots: ['깊은바다'], minSize: 20.0, maxSize: 45.0, basePrice: 21500000, color: '#9333ea' },
+    { name: '고대 심해 군주 레비아탄', grade: '신화', spots: ['깊은바다'], minSize: 60.0, maxSize: 150.0, basePrice: 450000000, color: '#b91c1c' },
+    { name: '심해의 신 요르문간드', grade: '신화', spots: ['깊은바다'], minSize: 80.0, maxSize: 180.0, basePrice: 650000000, color: '#450a0a' },
 
     // ================= [7. 👑 절대자 김병수의 어항 (Cosmic Aquarium - 오직 ⚛️ 태초 등급만 서식, 11단계 이상 전용)] =================
     { name: '코스믹 벨루가', grade: '태초', spots: ['절대자 김병수의 어항'], minSize: 400.0, maxSize: 800.0, basePrice: 50000000, color: '#06b6d4' },
@@ -2083,6 +2083,24 @@ function renderInventoryHtml() {
     return inventoryHtml;
 }
 
+// 🌊 마카라 신화 부스터 카드 렌더링 함수
+function renderMakaraBoosterCardHtml() {
+    let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
+    if (!hasMakara) return "";
+    let mythicBonusStr = (fishingData.makara_bonus_chance || 0).toFixed(2);
+    let primordialBonusStr = (fishingData.makara_primordial_bonus || 0).toFixed(2);
+    let primordialText = fishingData.rod_level >= 11 
+        ? `<span style="color: #047857; font-weight: 800; font-size: 0.76rem; margin-left: 6px;">(태초 +${primordialBonusStr}%)</span>` 
+        : '';
+    return `
+        <div id="makaraBoosterCard" style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 8px 10px; text-align: center; grid-column: span 2;">
+            <span style="color: #047857; font-weight: 700; font-size: 0.76rem;">🌊 마카라 신화 부스터:</span> 
+            <b id="makaraBoosterValue" style="color: #065f46; font-size: 0.9rem; margin-left: 4px;">+${mythicBonusStr}%</b>
+            ${primordialText}
+        </div>
+    `;
+}
+
 // 🎯 화면 스크롤 흔들림 없는 부드러운 인플레이스 스테이지 갱신 함수
 function updateFishingStageOnly() {
     let stageWrapper = document.getElementById('fishingStageWrapper');
@@ -2107,6 +2125,13 @@ function updateFishingStageOnly() {
 
     let compassEl = document.getElementById('fishingCompassFragments');
     if (compassEl) compassEl.innerText = `${(fishingData.compass_fragments || 0).toLocaleString()}개`;
+
+    let makaraSlot = document.getElementById('makaraBoosterSlot');
+    if (makaraSlot) {
+        let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
+        makaraSlot.style.display = hasMakara ? 'contents' : 'none';
+        makaraSlot.innerHTML = renderMakaraBoosterCardHtml();
+    }
 
     let invEl = document.getElementById('fishingInventoryArea');
     if (invEl) invEl.innerHTML = renderInventoryHtml();
@@ -2399,20 +2424,6 @@ async function renderFishingView(contentArea) {
     });
 
     let hasMakara = fishingData.unlocked_beasts && fishingData.unlocked_beasts.includes('마카라');
-    let makaraBoosterHtml = "";
-    if (hasMakara) {
-        let makaraCurrentBonus = (fishingData.makara_bonus_chance || 0).toFixed(2);
-        let primordialBoosterStr = fishingData.rod_level >= 11 ? `<div style="color: #065f46; font-weight: 900; font-size: 0.95rem; margin-top: 4px;">태초 확률 부스터: +${(fishingData.makara_primordial_bonus || 0).toFixed(2)}% 가산 중</div>` : ``;
-        makaraBoosterHtml = `
-            <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.85rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #047857; font-weight: 700;">🌊 마카라 신화 확률 부스터:</span>
-                    <span style="color: #065f46; font-weight: 900; font-size: 1rem;">+${makaraCurrentBonus}% 가산 중</span>
-                </div>
-                ${primordialBoosterStr}
-            </div>
-        `;
-    }
 
     let alertBoxDisplay = floatingAlertText ? 'block' : 'none';
 
@@ -2499,13 +2510,9 @@ async function renderFishingView(contentArea) {
                     <div style="color: #166534; font-weight: 700; font-size: 0.76rem;">🧭 나침반 (Lv.${fishingData.compass_level || 0}/${MAX_COMPASS_LEVEL})</div>
                     <div id="fishingCompassFragments" style="color: #15803d; font-weight: 900; font-size: 0.92rem; margin-top: 2px;">${(fishingData.compass_fragments || 0).toLocaleString()}개</div>
                 </div>
-                ${hasMakara ? `
-                <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 10px; padding: 8px 10px; text-align: center; grid-column: span 2;">
-                    <span style="color: #047857; font-weight: 700; font-size: 0.76rem;">🌊 마카라 신화 부스터:</span> 
-                    <b style="color: #065f46; font-size: 0.9rem; margin-left: 4px;">+${(fishingData.makara_bonus_chance || 0).toFixed(2)}%</b>
-                    ${fishingData.rod_level >= 11 ? `<span style="color: #047857; font-weight: 800; font-size: 0.76rem; margin-left: 6px;">(태초 +${(fishingData.makara_primordial_bonus || 0).toFixed(2)}%)</span>` : ''}
+                <div id="makaraBoosterSlot" style="${hasMakara ? 'display: contents;' : 'display: none;'}">
+                    ${renderMakaraBoosterCardHtml()}
                 </div>
-                ` : ''}
             </div>
 
             <!-- 🎮 실시간 그래픽 낚시 시뮬레이션 스테이지 래퍼 -->
@@ -2915,10 +2922,12 @@ async function feedMakara(fishName, index) {
     if (!fishingData.makara_bonus_chance) fishingData.makara_bonus_chance = 0;
     fishingData.makara_bonus_chance += mythicBonusAdd;
 
+    let primordialAddStr = "";
     if (fishingData.rod_level >= 11) {
         let primordialBonusAdd = mythicBonusAdd * 0.1;
         if (!fishingData.makara_primordial_bonus) fishingData.makara_primordial_bonus = 0;
         fishingData.makara_primordial_bonus += primordialBonusAdd;
+        primordialAddStr = ` (태초 +${fishingData.makara_primordial_bonus.toFixed(2)}%)`;
     }
 
     sizesArr.splice(index, 1);
@@ -2926,6 +2935,8 @@ async function feedMakara(fishName, index) {
 
     await saveFishingData();
     updateFishingStageOnly();
+
+    showFloatingAlert(`🌊 마카라가 [${fishName}]을(를) 삼켰습니다! 신화 확률 +${mythicBonusAdd.toFixed(2)}% (현재 누적: +${fishingData.makara_bonus_chance.toFixed(2)}%${primordialAddStr})`);
 }
 
 async function sellFish(fishName, index) {
