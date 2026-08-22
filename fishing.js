@@ -1,4 +1,69 @@
+(() => {
+'use strict';
+
 // fishing.js - 심해 낚시터 (7대 낚시터, 170+종 생물 도감, 태초 등급, 11·12단계 조 단위 낚싯대, 은화 무한 상승 및 나침반 24레벨 만렙 적용 버전)
+
+// 🛡️ [Anti-Cheat] 데이터 무결성 검증 및 비정상 변조 데이터 자동 정화 함수
+function validateAndSanitizeFishingData(data) {
+    if (!data || typeof data !== 'object') {
+        return { money: 1000, rod_level: 1, current_spot: '연못', silver_coins: 0, silver_coin_level: 0, compass_fragments: 0, compass_level: 0 };
+    }
+
+    // 1. 낚싯대 레벨 검증 (1 ~ 12 정수)
+    let rodLevel = Number(data.rod_level);
+    if (!Number.isFinite(rodLevel) || rodLevel < 1) rodLevel = 1;
+    if (rodLevel > 12) rodLevel = 12;
+    data.rod_level = Math.floor(rodLevel);
+
+    // 2. 낚싯대 단계별 합리적 최대 보유 금액 상한선 (F12 콘솔 500경 등 비정상 수치 원천 차단)
+    const MAX_MONEY_CAP_BY_ROD = {
+        1: 20000000,           // 1단계: 2천만 원
+        2: 50000000,           // 2단계: 5천만 원
+        3: 100000000,          // 3단계: 1억 원
+        4: 300000000,          // 4단계: 3억 원
+        5: 1000000000,         // 5단계: 10억 원
+        6: 5000000000,         // 6단계: 50억 원
+        7: 20000000000,        // 7단계: 200억 원
+        8: 100000000000,       // 8단계: 1,000억 원
+        9: 500000000000,       // 9단계: 5,000억 원
+        10: 2000000000000,     // 10단계: 2조 원
+        11: 10000000000000,    // 11단계: 10조 원
+        12: 50000000000000     // 12단계: 50조 원
+    };
+
+    let maxAllowedMoney = MAX_MONEY_CAP_BY_ROD[data.rod_level] || 20000000;
+    let money = Number(data.money);
+    if (!Number.isFinite(money) || money < 0) {
+        data.money = 1000;
+    } else if (money > maxAllowedMoney) {
+        console.warn(`🛡️ [Anti-Cheat] 비정상적인 재화 감지 (${money}원). 정상 상한선(${maxAllowedMoney}원)으로 자동 보정되었습니다.`);
+        data.money = maxAllowedMoney;
+    } else {
+        data.money = Math.floor(money);
+    }
+
+    // 3. 은화 및 나침반 레벨 상한선 검증
+    let sc = Number(data.silver_coins);
+    data.silver_coins = (Number.isFinite(sc) && sc >= 0) ? Math.min(1000000, Math.floor(sc)) : 0;
+
+    let scl = Number(data.silver_coin_level);
+    data.silver_coin_level = (Number.isFinite(scl) && scl >= 0) ? Math.min(100, Math.floor(scl)) : 0;
+
+    let cf = Number(data.compass_fragments);
+    data.compass_fragments = (Number.isFinite(cf) && cf >= 0) ? Math.min(10000, Math.floor(cf)) : 0;
+
+    let cl = Number(data.compass_level);
+    data.compass_level = (Number.isFinite(cl) && cl >= 0) ? Math.min(24, Math.floor(cl)) : 0;
+
+    // 4. 마카라 부스터 상한선 검증
+    let mkBonus = Number(data.makara_bonus_chance);
+    data.makara_bonus_chance = (Number.isFinite(mkBonus) && mkBonus >= 0) ? Math.min(50.0, mkBonus) : 0;
+
+    let mkPrimordial = Number(data.makara_primordial_bonus);
+    data.makara_primordial_bonus = (Number.isFinite(mkPrimordial) && mkPrimordial >= 0) ? Math.min(5.0, mkPrimordial) : 0;
+
+    return data;
+}
 
 let fishingData = { 
     money: 1000, 
@@ -831,46 +896,65 @@ async function initFishing() {
         .maybeSingle();
 
     if (data) {
-        let savedMoney = (data.money !== undefined && data.money >= 0) ? data.money : 1000;
-        let savedRod = (data.rod_level !== undefined && data.rod_level >= 1) ? data.rod_level : 1;
-        if (savedRod > 12) savedRod = 12;
+        let sanitized = validateAndSanitizeFishingData(data);
+        let wasContaminated = (data.money !== sanitized.money) || (data.silver_coins !== sanitized.silver_coins) || (data.compass_level !== sanitized.compass_level);
+
         let savedSpot = localStorage.getItem(`yubsa_spot_${currentUser}`) || '연못';
         if (!FISHING_SPOTS[savedSpot]) savedSpot = '연못';
-        if (savedSpot === '절대자 김병수의 어항' && savedRod < 11) savedSpot = '연못';
+        if (savedSpot === '절대자 김병수의 어항' && sanitized.rod_level < 11) savedSpot = '연못';
 
         // 🛠️ 구버전 잔여 고스트 어종 기록 자동 정리 (현재 177종 도감 + 특수 어종만 보존)
         let validFishNames = new Set(FISH_DATABASE.map(f => f.name));
         validFishNames.add('붕');
         validFishNames.add('길냥이의 물고기');
         let cleanedRecords = {};
-        if (data.fish_records && typeof data.fish_records === 'object') {
-            for (let [k, v] of Object.entries(data.fish_records)) {
+        if (sanitized.fish_records && typeof sanitized.fish_records === 'object') {
+            for (let [k, v] of Object.entries(sanitized.fish_records)) {
                 if (validFishNames.has(k)) {
                     cleanedRecords[k] = v;
                 }
             }
         }
 
+        // 보관고 무결성 검증
+        let cleanInventory = {};
+        if (sanitized.fish_inventory && typeof sanitized.fish_inventory === 'object') {
+            for (let [k, v] of Object.entries(sanitized.fish_inventory)) {
+                if (validFishNames.has(k) && Array.isArray(v) && v.length > 0) {
+                    cleanInventory[k] = v;
+                }
+            }
+        }
+
+        // 영물 목록 무결성 검증
+        let validBeastNames = new Set(MYTHICAL_BEASTS.map(b => b.name));
+        let cleanBeasts = Array.isArray(sanitized.unlocked_beasts) ? sanitized.unlocked_beasts.filter(b => validBeastNames.has(b)) : [];
+
         fishingData = {
-            money: savedMoney,
-            rod_level: savedRod,
+            money: sanitized.money,
+            rod_level: sanitized.rod_level,
             current_spot: savedSpot,
             fish_records: cleanedRecords,
-            fish_inventory: data.fish_inventory || {},
-            unlocked_beasts: data.unlocked_beasts || [],
-            cursed_target: data.cursed_target !== undefined ? data.cursed_target : currentUser,
-            curse_remaining_count: data.curse_remaining_count !== undefined ? data.curse_remaining_count : 0,
-            makara_bonus_chance: data.makara_bonus_chance !== undefined ? data.makara_bonus_chance : 0,
-            makara_primordial_bonus: data.makara_primordial_bonus !== undefined ? data.makara_primordial_bonus : 0,
-            siren_streak: data.siren_streak !== undefined ? data.siren_streak : 0,
-            dagon_partner: data.dagon_partner || null,
+            fish_inventory: cleanInventory,
+            unlocked_beasts: cleanBeasts,
+            cursed_target: sanitized.cursed_target !== undefined ? sanitized.cursed_target : currentUser,
+            curse_remaining_count: sanitized.curse_remaining_count !== undefined ? sanitized.curse_remaining_count : 0,
+            makara_bonus_chance: sanitized.makara_bonus_chance !== undefined ? sanitized.makara_bonus_chance : 0,
+            makara_primordial_bonus: sanitized.makara_primordial_bonus !== undefined ? sanitized.makara_primordial_bonus : 0,
+            siren_streak: sanitized.siren_streak !== undefined ? sanitized.siren_streak : 0,
+            dagon_partner: sanitized.dagon_partner || null,
             is_dagon_mutual: false,
-            trade_request: data.trade_request || null,
-            silver_coins: data.silver_coins !== undefined ? data.silver_coins : 0,
-            silver_coin_level: data.silver_coin_level !== undefined ? data.silver_coin_level : 0,
-            compass_fragments: data.compass_fragments !== undefined ? data.compass_fragments : 0,
-            compass_level: data.compass_level !== undefined ? data.compass_level : 0
+            trade_request: sanitized.trade_request || null,
+            silver_coins: sanitized.silver_coins !== undefined ? sanitized.silver_coins : 0,
+            silver_coin_level: sanitized.silver_coin_level !== undefined ? sanitized.silver_coin_level : 0,
+            compass_fragments: sanitized.compass_fragments !== undefined ? sanitized.compass_fragments : 0,
+            compass_level: sanitized.compass_level !== undefined ? sanitized.compass_level : 0
         };
+
+        if (wasContaminated) {
+            console.warn("🛡️ [Anti-Cheat] 오염된 변조 데이터를 감지하여 정상치로 복구 후 DB를 자동 정화합니다.");
+            await saveFishingData();
+        }
     } else {
         await supabaseClient.from('user_fishing_data').insert([{
             nickname: currentUser,
@@ -903,6 +987,8 @@ async function initFishing() {
 async function saveFishingData() {
     if (!currentUser) return;
     
+    validateAndSanitizeFishingData(fishingData);
+
     localStorage.setItem(`yubsa_spot_${currentUser}`, fishingData.current_spot || '연못');
 
     let cleanInventory = {};
@@ -3015,7 +3101,7 @@ async function claimChance() {
     window.scrollTo(0, currentScroll);
 }
 
-// 🟢 전역 window 객체에 함수 바인딩
+// 🟢 전역 window 객체에 필요한 디스패처 함수만 엄격히 바인딩
 window.initFishing = initFishing;
 window.renderFishingView = renderFishingView;
 window.startCast = startCast;
@@ -3044,3 +3130,7 @@ window.toggleHippocampusAuto = toggleHippocampusAuto;
 window.setRecordFilter = setRecordFilter;
 window.setSpotFilter = setSpotFilter;
 window.selectFishingSpot = selectFishingSpot;
+window.openCurseManager = openCurseManager;
+window.applyCurseTarget = applyCurseTarget;
+
+})();

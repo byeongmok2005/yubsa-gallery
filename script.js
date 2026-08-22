@@ -207,6 +207,17 @@ function toggleSidebar() {
 
 function navigateTo(view) {
     toggleSidebar();
+    if (view === 'admin') {
+        getVerifiedSessionUser().then(realUser => {
+            if (realUser !== '박병목') {
+                alert("🚫 관리자(박병목) 계정만 접근할 수 있습니다.");
+                return;
+            }
+            currentView = 'admin';
+            renderMainContent();
+        });
+        return;
+    }
     currentView = view;
     if (view === 'home') {
         selectedProfile = null;
@@ -810,26 +821,20 @@ async function deleteTravelPhoto(photoId, imageUrl) {
 }
 // ========================================================
 
+// 🔒 관리자(박병목) 전용 고정 마스터 PIN 목록 (F12 변조 및 타 사용자 임의 등록 원천 차단)
+const ADMIN_MASTER_PINS = ['1234', '0822', 'yubsa2026'];
+
 async function renderAdminView(contentArea) {
     const realUser = await getVerifiedSessionUser();
     if (realUser !== '박병목') {
-        contentArea.innerHTML = `
-            <div class="card" style="text-align: center; padding: 40px 20px;">
-                <div style="font-size: 3rem; margin-bottom: 12px;">🚫</div>
-                <h2 style="color: var(--danger); font-size: 1.3rem; font-weight: 800; margin-bottom: 8px;">접근 불가 (보안 경고)</h2>
-                <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5;">
-                    관리자(박병목) 계정으로 실제 로그인된 세션이 아닙니다.<br>
-                    F12 콘솔 변수 조작 및 비인가 접근이 완벽히 차단되었습니다.
-                </p>
-                <button class="btn-primary" onclick="navigateTo('home')">홈으로 돌아가기</button>
-            </div>
-        `;
+        alert("🚫 관리자(박병목) 계정이 아닙니다. 접근이 엄격히 차단되었습니다.");
+        currentView = 'home';
+        renderMainContent();
         return;
     }
 
-    let masterHash = localStorage.getItem('yubsa_admin_master_hash');
     if (!isAdminSessionVerified) {
-        openAdminPinModal(masterHash);
+        await openAdminPinModal();
         return;
     }
 
@@ -1011,21 +1016,22 @@ async function adminDeleteComment(commentId) {
     renderAdminView(document.getElementById("contentArea"));
 }
 
-function openAdminPinModal(masterHash) {
+async function openAdminPinModal() {
+    const realUser = await getVerifiedSessionUser();
+    if (realUser !== '박병목') {
+        alert("🚫 관리자(박병목) 계정이 아닙니다. 접근이 엄격히 차단되었습니다.");
+        navigateTo('home');
+        return;
+    }
+
     const existing = document.getElementById("adminPinModal");
     if (existing) existing.remove();
-
-    let isInitialSetup = !masterHash;
-    let titleText = isInitialSetup ? "👑 [최초 설정] 관리자 마스터 PIN 등록" : "👑 [2차 보안] 관리자 마스터 PIN 인증";
-    let descText = isInitialSetup 
-        ? "관리자 페이지를 철통 보호하기 위해 사용할 마스터 비밀번호(PIN)를 등록해주세요.<br><span style='color:#0284c7; font-size:0.8rem;'>※ 단방향 암호화(SHA-256)로 저장되어 F12로도 절대 열람할 수 없습니다.</span>" 
-        : "관리자 페이지에 접근하려면 마스터 비밀번호(PIN)를 입력하세요.";
 
     let modalHtml = `
         <div id="adminPinModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 99999;">
             <div style="background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border-top: 6px solid #eab308; text-align: left;">
-                <h3 style="margin-top: 0; color: #1e293b; font-size: 1.15rem; font-weight: 800;">${titleText}</h3>
-                <p style="font-size: 0.85rem; color: #64748b; line-height: 1.5; margin: 10px 0 16px 0;">${descText}</p>
+                <h3 style="margin-top: 0; color: #1e293b; font-size: 1.15rem; font-weight: 800;">👑 [2차 보안] 관리자 마스터 PIN 인증</h3>
+                <p style="font-size: 0.85rem; color: #64748b; line-height: 1.5; margin: 10px 0 16px 0;">관리자 페이지에 접근하려면 마스터 비밀번호(PIN)를 입력하세요.</p>
                 
                 <div style="margin-bottom: 16px;">
                     <label style="font-size: 0.8rem; font-weight: 700; color: #334155; display: block; margin-bottom: 6px;">마스터 비밀번호 (PIN)</label>
@@ -1033,7 +1039,7 @@ function openAdminPinModal(masterHash) {
                 </div>
 
                 <div style="display: flex; gap: 8px;">
-                    <button onclick="submitAdminPin(${isInitialSetup})" style="flex: 2; background: linear-gradient(135deg, #eab308, #ca8a04); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 800; font-size: 0.95rem; cursor: pointer;">${isInitialSetup ? 'PIN 등록 및 입장' : '인증 및 입장'}</button>
+                    <button onclick="submitAdminPin()" style="flex: 2; background: linear-gradient(135deg, #eab308, #ca8a04); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 800; font-size: 0.95rem; cursor: pointer;">인증 및 입장</button>
                     <button onclick="closeAdminPinModal()" style="flex: 1; background: #94a3b8; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer;">취소</button>
                 </div>
             </div>
@@ -1046,13 +1052,21 @@ function openAdminPinModal(masterHash) {
         if (input) {
             input.focus();
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') submitAdminPin(isInitialSetup);
+                if (e.key === 'Enter') submitAdminPin();
             });
         }
     }, 100);
 }
 
-async function submitAdminPin(isInitialSetup) {
+async function submitAdminPin() {
+    const realUser = await getVerifiedSessionUser();
+    if (realUser !== '박병목') {
+        alert("🚫 비인가 접근입니다.");
+        closeAdminPinModal();
+        navigateTo('home');
+        return;
+    }
+
     let input = document.getElementById("adminSecurityPinInput");
     if (!input) return;
     let val = input.value.trim();
@@ -1061,27 +1075,15 @@ async function submitAdminPin(isInitialSetup) {
         return;
     }
 
-    let inputHash = await hashStringSHA256(val);
-
-    if (isInitialSetup) {
-        localStorage.setItem('yubsa_admin_master_hash', inputHash);
+    if (ADMIN_MASTER_PINS.includes(val)) {
         isAdminSessionVerified = true;
         closeAdminPinModal();
-        alert("👑 관리자 마스터 PIN이 성공적으로 등록되었습니다!");
         const contentArea = document.getElementById("contentArea");
         if (contentArea) renderAdminView(contentArea);
     } else {
-        let masterHash = localStorage.getItem('yubsa_admin_master_hash');
-        if (inputHash === masterHash) {
-            isAdminSessionVerified = true;
-            closeAdminPinModal();
-            const contentArea = document.getElementById("contentArea");
-            if (contentArea) renderAdminView(contentArea);
-        } else {
-            alert("❌ 관리자 마스터 비밀번호가 일치하지 않습니다.");
-            input.value = "";
-            input.focus();
-        }
+        alert("❌ 관리자 마스터 비밀번호가 일치하지 않습니다.");
+        input.value = "";
+        input.focus();
     }
 }
 
